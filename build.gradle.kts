@@ -1,26 +1,46 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
-    kotlin("jvm")
-    id("org.jetbrains.compose")
-    id("org.jetbrains.kotlin.plugin.compose")
+    kotlin("jvm") version "2.0.0" // Явно указываем версию Kotlin
+    id("org.jetbrains.compose") version "1.6.10"
+    id("org.jetbrains.kotlin.plugin.compose") version  "2.0.0"
+
+
 }
 
 group = "michigang1.healthcare"
 version = "1.0-SNAPSHOT"
 
 repositories {
-    mavenCentral()
     maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     google()
+    gradlePluginPortal()
+    mavenCentral()
 }
 
 dependencies {
-    // Note, if you develop a library, you should use compose.desktop.common.
-    // compose.desktop.currentOs should be used in launcher-sourceSet
-    // (in a separate module for demo project and in testMain).
-    // With compose.desktop.common you will also lose @Preview functionality
-    implementation(compose.desktop.currentOs)
+    // Kotlinx
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1") // Рекомендуется обновить до последней стабильной
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
+
+
+    // Retrofit & OkHttp (рекомендуется проверить наличие более новых версий)
+    implementation("com.squareup.retrofit2:retrofit:2.9.0") // Рекомендуется обновить
+    implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // Для логирования запросов
+
+    // Если используете Moshi вместе с kotlinx-serialization, убедитесь, что это сделано осознанно
+    implementation("com.squareup.retrofit2:converter-moshi:2.9.0") // Также можно обновить, если используется
+
+    // Koin for Dependency Injection
+    val koinVersion = "4.0.4"
+    implementation("io.insert-koin:koin-core:$koinVersion")
+
+    // Compose Desktop Dependencies
+    implementation(compose.desktop.currentOs) // Основная зависимость, включает ui, foundation, runtime
+    implementation(compose.material3)      // Рекомендуется использовать Material 3
 }
 
 compose.desktop {
@@ -33,4 +53,8 @@ compose.desktop {
             packageVersion = "1.0.0"
         }
     }
+}
+
+kotlin {
+    jvmToolchain(18)
 }
