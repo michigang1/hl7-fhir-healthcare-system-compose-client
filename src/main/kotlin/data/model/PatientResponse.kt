@@ -1,5 +1,8 @@
 package data.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class PatientResponse(
     val id: Long,
     val name: String,

@@ -44,7 +44,7 @@ class DiagnosisViewModel(
 
     private fun DiagnosisDto.toDiagnosisRequest(): DiagnosisRequest {
         return DiagnosisRequest(
-            id = if (this.id == NEW_DIAGNOSIS_ID) null else this.id,
+            id =  this.patientId,
             code = this.diagnosisCode,
             isPrimary = this.isPrimary,
             description = this.description,
@@ -164,7 +164,9 @@ class DiagnosisViewModel(
             try {
                 val response = if (isNew) {
                     withContext(ioDispatcher) {
-                        diagnosisApiService.createDiagnosis(diagnosisToSave.toDiagnosisRequest())
+                        diagnosisApiService.createDiagnosis(
+                            diagnosisToSave.toDiagnosisRequest()
+                        )
                     }
                 } else {
                     withContext(ioDispatcher) {

@@ -1,17 +1,18 @@
 package data.remote
 
 
+import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import data.remote.services.AuthApiService
 import data.remote.services.DiagnosisApiService
 import data.remote.services.MedicationApiService
 import data.remote.services.PatientApiService
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
 import utils.TokenManager
 import java.util.concurrent.TimeUnit
 
@@ -44,6 +45,8 @@ object RetrofitClient {
         ignoreUnknownKeys = true
         isLenient = true
         prettyPrint = true
+        coerceInputValues = true
+        encodeDefaults = true
     }
 
     private val okHttpClient: OkHttpClient by lazy {
@@ -60,10 +63,11 @@ object RetrofitClient {
     }
 
     private val retrofit: Retrofit by lazy {
+        val contentType = APPLICATION_JSON_CONTENT_TYPE.toMediaType()
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create())
+            .addConverterFactory(json.asConverterFactory(contentType))
             .build()
     }
 

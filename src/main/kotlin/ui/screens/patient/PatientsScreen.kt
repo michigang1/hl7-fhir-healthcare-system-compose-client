@@ -28,6 +28,7 @@ import data.model.PatientDto
 import presentation.viewmodel.DiagnosisViewModel
 import presentation.viewmodel.MedicationViewModel
 import presentation.viewmodel.PatientViewModel
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 
@@ -90,7 +91,9 @@ fun PatientsScreen(
             onCancel = { patientViewModel.cancelEditing() },
             onFieldChange = { update -> patientViewModel.updateDraftPatient(update) },
             medications = medicationState.medicationsForPatientList,
-            diagnoses = diagnosisState.diagnosesForPatientList
+            diagnoses = diagnosisState.diagnosesForPatientList,
+            medicationViewModel = medicationViewModel,
+            diagnosisViewModel = diagnosisViewModel
         )
     }
 
@@ -99,6 +102,36 @@ fun PatientsScreen(
             onDismiss = { patientViewModel.closeAddPatientDialog() },
             onAddPatient = { patient -> patientViewModel.addPatient(patient) }
         )
+    }
+
+    // Show medication add/edit dialog if needed
+    if (medicationState.showAddOrEditDialog) {
+        medicationState.draftMedication?.let { medication ->
+            MedicationDialog(
+                medication = medication,
+                isEditing = medicationState.isEditing,
+                onDismiss = { medicationViewModel.closeAddOrEditMedicationDialog() },
+                onSave = { medicationViewModel.saveMedication() },
+                onUpdate = { updatedMedication -> 
+                    medicationViewModel.updateDraftMedication { _ -> updatedMedication }
+                }
+            )
+        }
+    }
+
+    // Show diagnosis add/edit dialog if needed
+    if (diagnosisState.showAddOrEditDialog) {
+        diagnosisState.draftDiagnosis?.let { diagnosis ->
+            DiagnosisDialog(
+                diagnosis = diagnosis,
+                isEditing = diagnosisState.isEditing,
+                onDismiss = { diagnosisViewModel.closeAddOrEditDiagnosisDialog() },
+                onSave = { diagnosisViewModel.saveDiagnosis() },
+                onUpdate = { updatedDiagnosis -> 
+                    diagnosisViewModel.updateDraftDiagnosis { _ -> updatedDiagnosis }
+                }
+            )
+        }
     }
 
     // All alerts - as short as possible
@@ -168,20 +201,15 @@ private fun PatientDetailPane(
     onCancel: () -> Unit,
     onFieldChange: ((PatientDto) -> PatientDto) -> Unit,
     medications: List<MedicationDto>,
-    diagnoses: List<DiagnosisDto>
-
+    diagnoses: List<DiagnosisDto>,
+    medicationViewModel: MedicationViewModel,
+    diagnosisViewModel: DiagnosisViewModel
 ) {
     Box(
         modifier = modifier.padding(horizontal = 8.dp), // Добавлен общий горизонтальный padding
         contentAlignment = Alignment.TopStart
     ) {
         if (patientToDisplay != null) {
-            // Предполагается, что вы будете получать эти списки из PatientDto или ViewModel
-            val exampleMedications =
-                listOf("Medication A: 10mg daily", "Medication B: 5mg twice a day", "Supplement C: 1 tablet daily")
-            val exampleDiagnoses =
-                listOf("Diagnosis X: Confirmed 2023-01-15", "Condition Y: Monitored since 2022-11-20")
-
             PatientDetailCard( // PatientDetailCard будет использовать свой внутренний padding
                 patient = patientToDisplay,
                 isEditing = isEditing,
@@ -189,8 +217,10 @@ private fun PatientDetailPane(
                 onSave = onSave,
                 onCancel = onCancel,
                 onFieldChange = onFieldChange,
-                medications = medications, // Передаем пример данных
-                diagnoses = diagnoses    // Передаем пример данных
+                medications = medications,
+                diagnoses = diagnoses,
+                medicationViewModel = medicationViewModel,
+                diagnosisViewModel = diagnosisViewModel
             )
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -314,30 +344,97 @@ private fun PatientSectionTitle(title: String) {
 }
 
 @Composable
-private fun PatientMedicationsTable(medications: List<MedicationDto>) { // Обновленный тип
+private fun PatientMedicationsTable(
+    medications: List<MedicationDto>,
+    patientId: Long?,
+    medicationViewModel: MedicationViewModel
+) {
     Column {
+        // Header with Add button
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Medications",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            patientId?.let { id ->
+                Button(
+                    onClick = { medicationViewModel.openAddMedicationDialog(id) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "Add Medication",
+                        modifier = Modifier.size(ButtonDefaults.IconSize)
+                    )
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text("Add Medication")
+                }
+            }
+        }
+
         if (medications.isEmpty()) {
             Text("No medications.")
             return
         }
+
         // Заголовки таблицы
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
             Text("Name", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
             Text("Dosage", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
             Text("Frequency", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
-            Text("Star Date", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
+            Text("Start Date", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
             Text("End Date", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
-            Text("Prescribed By", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+            Text("Prescribed By", modifier = Modifier.weight(0.8f), style = MaterialTheme.typography.labelSmall)
+            Text("Actions", modifier = Modifier.weight(0.5f), style = MaterialTheme.typography.labelSmall)
         }
         HorizontalDivider()
         medications.forEach { med ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(med.medicationName, modifier = Modifier.weight(1f))
                 Text(med.dosage, modifier = Modifier.weight(1f))
                 Text(med.frequency, modifier = Modifier.weight(1f))
                 Text(med.startDate.format(DateTimeFormatter.ISO_LOCAL_DATE), modifier = Modifier.weight(0.7f))
                 Text(med.endDate.format(DateTimeFormatter.ISO_LOCAL_DATE), modifier = Modifier.weight(0.7f))
-                Text(med.prescribedBy, modifier = Modifier.weight(1f))
+                Text(med.prescribedBy, modifier = Modifier.weight(0.8f))
+
+                // Action buttons
+                Row(
+                    modifier = Modifier.weight(0.5f),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(
+                        onClick = { medicationViewModel.openEditMedicationDialog(med) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = "Edit Medication",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { medicationViewModel.deleteMedication(med.patientId, med.id) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Delete Medication",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
             HorizontalDivider()
         }
@@ -346,28 +443,95 @@ private fun PatientMedicationsTable(medications: List<MedicationDto>) { // Об�
 
 
 @Composable
-private fun PatientDiagnosesTable(diagnoses: List<DiagnosisDto>) { // Обновленный тип
+private fun PatientDiagnosesTable(
+    diagnoses: List<DiagnosisDto>,
+    patientId: Long?,
+    diagnosisViewModel: DiagnosisViewModel
+) {
     Column {
+        // Header with Add button
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Diagnoses",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            patientId?.let { id ->
+                Button(
+                    onClick = { diagnosisViewModel.openAddDiagnosisDialog(id) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "Add Diagnosis",
+                        modifier = Modifier.size(ButtonDefaults.IconSize)
+                    )
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text("Add Diagnosis")
+                }
+            }
+        }
+
         if (diagnoses.isEmpty()) {
             Text("No diagnoses.")
             return
         }
+
         // Заголовки таблицы
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
             Text("Code", modifier = Modifier.weight(0.5f), style = MaterialTheme.typography.labelSmall)
-            Text("Descritpion", modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.labelSmall)
+            Text("Description", modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.labelSmall)
             Text("Date", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
             Text("isPrimary", modifier = Modifier.weight(0.6f), style = MaterialTheme.typography.labelSmall)
-            Text("Prescribed By", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+            Text("Prescribed By", modifier = Modifier.weight(0.8f), style = MaterialTheme.typography.labelSmall)
+            Text("Actions", modifier = Modifier.weight(0.5f), style = MaterialTheme.typography.labelSmall)
         }
         HorizontalDivider()
         diagnoses.forEach { diagnosis ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(diagnosis.diagnosisCode, modifier = Modifier.weight(0.5f))
                 Text(diagnosis.description, modifier = Modifier.weight(1.5f))
                 Text(diagnosis.date.format(DateTimeFormatter.ISO_LOCAL_DATE), modifier = Modifier.weight(0.7f))
-                Text(if (diagnosis.isPrimary) "Да" else "Нет", modifier = Modifier.weight(0.6f))
-                Text(diagnosis.prescribedBy, modifier = Modifier.weight(1f))
+                Text(if (diagnosis.isPrimary) "Yes" else "No", modifier = Modifier.weight(0.6f))
+                Text(diagnosis.prescribedBy, modifier = Modifier.weight(0.8f))
+
+                // Action buttons
+                Row(
+                    modifier = Modifier.weight(0.5f),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(
+                        onClick = { diagnosisViewModel.openEditDiagnosisDialog(diagnosis) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = "Edit Diagnosis",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { diagnosisViewModel.deleteDiagnosis(diagnosis.patientId, diagnosis.id) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Delete Diagnosis",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
             HorizontalDivider()
         }
@@ -384,7 +548,9 @@ private fun PatientDetailCard(
     onCancel: () -> Unit,
     onFieldChange: ((PatientDto) -> PatientDto) -> Unit,
     medications: List<MedicationDto>,
-    diagnoses: List<DiagnosisDto>
+    diagnoses: List<DiagnosisDto>,
+    medicationViewModel: MedicationViewModel,
+    diagnosisViewModel: DiagnosisViewModel
 ) {
     Card(modifier = Modifier.fillMaxSize().padding(top = 8.dp /* Если нужен отступ сверху внутри панели */)) {
         Column(
@@ -440,14 +606,22 @@ private fun PatientDetailCard(
                 thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.outlineVariant
             )
-            PatientMedicationsTable(medications = medications)
+            PatientMedicationsTable(
+                medications = medications,
+                patientId = patient.id,
+                medicationViewModel = medicationViewModel
+            )
 
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
                 thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.outlineVariant
             )
-            PatientDiagnosesTable(diagnoses = diagnoses)
+            PatientDiagnosesTable(
+                diagnoses = diagnoses,
+                patientId = patient.id,
+                diagnosisViewModel = diagnosisViewModel
+            )
         }
     }
 }
@@ -678,4 +852,304 @@ fun SimpleAlertDialog(text: String, onDismiss: () -> Unit) {
             Button(onClick = onDismiss) { Text("OK") }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MedicationDialog(
+    medication: MedicationDto,
+    isEditing: Boolean,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+    onUpdate: (MedicationDto) -> Unit
+) {
+    var name by remember { mutableStateOf(medication.medicationName) }
+    var dosage by remember { mutableStateOf(medication.dosage) }
+    var frequency by remember { mutableStateOf(medication.frequency) }
+    var startDate by remember { mutableStateOf(medication.startDate.toString()) }
+    var endDate by remember { mutableStateOf(medication.endDate.toString()) }
+    var prescribedBy by remember { mutableStateOf(medication.prescribedBy) }
+
+    var showError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("Please fill all required fields.") }
+
+    // Update the ViewModel's draft medication when any field changes
+    LaunchedEffect(name, dosage, frequency, startDate, endDate, prescribedBy) {
+        try {
+            val updatedMedication = medication.copy(
+                medicationName = name,
+                dosage = dosage,
+                frequency = frequency,
+                startDate = LocalDate.parse(startDate),
+                endDate = LocalDate.parse(endDate),
+                prescribedBy = prescribedBy
+            )
+            onUpdate(updatedMedication)
+        } catch (e: Exception) {
+            // Date parsing error, don't update the draft
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    if (isEditing) "Edit Medication" else "Add New Medication", 
+                    style = MaterialTheme.typography.headlineSmall
+                )
+
+                if (showError) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; showError = false },
+                    label = { Text("Medication Name*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && name.isBlank()
+                )
+
+                OutlinedTextField(
+                    value = dosage,
+                    onValueChange = { dosage = it; showError = false },
+                    label = { Text("Dosage*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && dosage.isBlank()
+                )
+
+                OutlinedTextField(
+                    value = frequency,
+                    onValueChange = { frequency = it; showError = false },
+                    label = { Text("Frequency*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && frequency.isBlank()
+                )
+
+                OutlinedTextField(
+                    value = startDate,
+                    onValueChange = { startDate = it; showError = false },
+                    label = { Text("Start Date (YYYY-MM-DD)*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && startDate.isBlank()
+                )
+
+                OutlinedTextField(
+                    value = endDate,
+                    onValueChange = { endDate = it; showError = false },
+                    label = { Text("End Date (YYYY-MM-DD)*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && endDate.isBlank()
+                )
+
+                OutlinedTextField(
+                    value = prescribedBy,
+                    onValueChange = { prescribedBy = it; showError = false },
+                    label = { Text("Prescribed By*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && prescribedBy.isBlank()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        if (name.isNotBlank() && dosage.isNotBlank() && frequency.isNotBlank() &&
+                            startDate.isNotBlank() && endDate.isNotBlank() && prescribedBy.isNotBlank()
+                        ) {
+                            try {
+                                // Validate dates
+                                LocalDate.parse(startDate)
+                                LocalDate.parse(endDate)
+                                onSave()
+                            } catch (e: Exception) {
+                                errorMessage = "Invalid date format. Use YYYY-MM-DD."
+                                showError = true
+                            }
+                        } else {
+                            errorMessage = "Please fill all required fields."
+                            showError = true
+                        }
+                    }) {
+                        Text(if (isEditing) "Save Changes" else "Add Medication")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiagnosisDialog(
+    diagnosis: DiagnosisDto,
+    isEditing: Boolean,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+    onUpdate: (DiagnosisDto) -> Unit
+) {
+    var code by remember { mutableStateOf(diagnosis.diagnosisCode) }
+    var isPrimary by remember { mutableStateOf(diagnosis.isPrimary) }
+    var description by remember { mutableStateOf(diagnosis.description) }
+    var date by remember { mutableStateOf(diagnosis.date.toString()) }
+    var prescribedBy by remember { mutableStateOf(diagnosis.prescribedBy) }
+
+    var showError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("Please fill all required fields.") }
+
+    // Update the ViewModel's draft diagnosis when any field changes
+    LaunchedEffect(code, isPrimary, description, date, prescribedBy) {
+        try {
+            val updatedDiagnosis = diagnosis.copy(
+                diagnosisCode = code,
+                isPrimary = isPrimary,
+                description = description,
+                date = LocalDate.parse(date),
+                prescribedBy = prescribedBy,
+                patientId = diagnosis.patientId // Preserve the patientId
+            )
+            onUpdate(updatedDiagnosis)
+        } catch (e: Exception) {
+            // Date parsing error, don't update the draft
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    if (isEditing) "Edit Diagnosis" else "Add New Diagnosis", 
+                    style = MaterialTheme.typography.headlineSmall
+                )
+
+                if (showError) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it; showError = false },
+                    label = { Text("Diagnosis Code*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && code.isBlank()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Is Primary Diagnosis:", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = isPrimary,
+                        onCheckedChange = { isPrimary = it }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it; showError = false },
+                    label = { Text("Description*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = false,
+                    minLines = 3,
+                    isError = showError && description.isBlank()
+                )
+
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = { date = it; showError = false },
+                    label = { Text("Diagnosis Date (YYYY-MM-DD)*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && date.isBlank()
+                )
+
+                OutlinedTextField(
+                    value = prescribedBy,
+                    onValueChange = { prescribedBy = it; showError = false },
+                    label = { Text("Diagnosed By*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showError && prescribedBy.isBlank()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        if (code.isNotBlank() && description.isNotBlank() &&
+                            date.isNotBlank() && prescribedBy.isNotBlank()
+                        ) {
+                            try {
+                                // Validate date
+                                LocalDate.parse(date)
+                                onSave()
+                            } catch (e: Exception) {
+                                errorMessage = "Invalid date format. Use YYYY-MM-DD."
+                                showError = true
+                            }
+                        } else {
+                            errorMessage = "Please fill all required fields."
+                            showError = true
+                        }
+                    }) {
+                        Text(if (isEditing) "Save Changes" else "Add Diagnosis")
+                    }
+                }
+            }
+        }
+    }
 }

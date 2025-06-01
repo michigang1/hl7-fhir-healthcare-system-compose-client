@@ -30,19 +30,19 @@ class SignUpViewModel(
     // Input fields
     var username by mutableStateOf("")
         private set
-    
+
     var email by mutableStateOf("")
         private set
-    
+
     var password by mutableStateOf("")
         private set
-    
+
     var confirmPassword by mutableStateOf("")
         private set
 
     // List of available roles for selection
     val availableRoles: List<String> = listOf("ROLE_NURSE", "ROLE_DOCTOR", "ROLE_SOCIAL_WORKER")
-    
+
     // Selected role, initialized with the first available role
     var selectedRole by mutableStateOf(availableRoles.firstOrNull() ?: "")
         private set
@@ -115,11 +115,18 @@ class SignUpViewModel(
                     password = password,
                     roles = setOf(selectedRole)
                 )
-                val response = withContext(ioDispatcher) {
+                val retrofitResponse = withContext(ioDispatcher) {
                     apiService.register(request)
                 }
-                state = state.copy(isLoading = false, response = response)
-                onSignUpSuccess(response)
+
+                if (retrofitResponse.isSuccessful && retrofitResponse.body() != null) {
+                    val signUpResponse = retrofitResponse.body()!!
+                    state = state.copy(isLoading = false, response = signUpResponse)
+                    onSignUpSuccess(signUpResponse)
+                } else {
+                    val errorMessage = "Registration failed: ${retrofitResponse.message() ?: "Server error ${retrofitResponse.code()}"}"
+                    state = state.copy(isLoading = false, errorMessage = errorMessage)
+                }
             } catch (e: HttpException) {
                 val errorBody = e.response()?.errorBody()?.string()
                 val errorMessage = if (errorBody != null) {

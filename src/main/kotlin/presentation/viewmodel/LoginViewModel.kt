@@ -28,7 +28,7 @@ class LoginViewModel(
     // Input fields
     var username by mutableStateOf("")
         private set
-    
+
     var password by mutableStateOf("")
         private set
 
@@ -50,12 +50,22 @@ class LoginViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val response = withContext(ioDispatcher) {
+                val retrofitResponse = withContext(ioDispatcher) {
                     apiService.login(LoginRequest(username, password))
                 }
-                TokenManager.setToken(response.token) // Save token
-                state = state.copy(isLoading = false, jwtResponse = response)
-                onLoginSuccess(response)
+
+                if (retrofitResponse.isSuccessful && retrofitResponse.body() != null) {
+                    val jwtResponse = retrofitResponse.body()!!
+                    TokenManager.setToken(jwtResponse.token) // Save token
+                    state = state.copy(isLoading = false, jwtResponse = jwtResponse)
+                    onLoginSuccess(jwtResponse)
+                } else {
+                    TokenManager.clearToken() // Clear token in case of error
+                    state = state.copy(
+                        isLoading = false,
+                        errorMessage = "Login failed: ${retrofitResponse.message() ?: "Server error ${retrofitResponse.code()}"}"
+                    )
+                }
             } catch (e: Exception) {
                 TokenManager.clearToken() // Clear token in case of error
                 state = state.copy(
