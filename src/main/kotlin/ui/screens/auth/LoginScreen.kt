@@ -1,4 +1,4 @@
-package presentation
+package ui.screens.auth
 
 
 import androidx.compose.foundation.layout.*
@@ -8,13 +8,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import presentation.viewmodel.LoginViewModel
 
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel, // ViewModel передается в Composable
     onNavigateToRegister: () -> Unit
 ) {
-    val loginState by viewModel.loginState.collectAsState()
+    val loginState = viewModel.state
 
     Column(
         modifier = Modifier
@@ -47,10 +48,10 @@ fun LoginScreen(
 
         Button(
             onClick = { viewModel.login() },
-            enabled = loginState !is LoginScreenState.Loading,
+            enabled = !loginState.isLoading,
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (loginState is LoginScreenState.Loading) {
+            if (loginState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
             } else {
                 Text("Login")
@@ -62,16 +63,11 @@ fun LoginScreen(
             Text("Don't have an account? Register")
         }
 
-        when (val state = loginState) {
-            is LoginScreenState.Error -> {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(state.message, color = MaterialTheme.colorScheme.error)
-            }
-            is LoginScreenState.Success -> {
-                // Навигация или другое действие при успехе уже обрабатывается в onLoginSuccess в ViewModel
-                // Text("Login successful! Token: ${state.jwtResponse.token.take(10)}...", color = Color.Green)
-            }
-            else -> {} // Idle, Loading
+        loginState.errorMessage?.let { errorMessage ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(errorMessage, color = MaterialTheme.colorScheme.error)
         }
+
+        // Success is handled by onLoginSuccess callback in ViewModel
     }
 }

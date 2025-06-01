@@ -1,7 +1,10 @@
 package data.remote
 
-import data.AuthApiService
-import data.PatientApiService
+
+import data.remote.services.AuthApiService
+import data.remote.services.DiagnosisApiService
+import data.remote.services.MedicationApiService
+import data.remote.services.PatientApiService
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -71,4 +74,13 @@ object RetrofitClient {
     val patientApiService: PatientApiService by lazy {
         retrofit.create(PatientApiService::class.java)
     }
+
+    val medicationApiService: MedicationApiService by lazy {
+        retrofit.create(MedicationApiService::class.java)
+    }
+
+    val diagnosisApiService: DiagnosisApiService by lazy {
+        retrofit.create(DiagnosisApiService::class.java)
+    }
+
 }

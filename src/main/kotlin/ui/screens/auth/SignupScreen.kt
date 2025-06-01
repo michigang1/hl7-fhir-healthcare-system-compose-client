@@ -1,4 +1,4 @@
-package presentation
+package ui.screens.auth
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -12,6 +12,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import presentation.viewmodel.SignUpViewModel
 
 @Composable
 fun SignUpScreen(
@@ -19,15 +20,15 @@ fun SignUpScreen(
     onNavigateToLogin: () -> Unit,
     onSignUpSuccessNavigation: () -> Unit
 ) {
-    val signUpState by viewModel.signUpState.collectAsState()
+    val signUpState = viewModel.state
 
     // В идеале, 'roles' должны приходить из viewModel.availableRoles
     // Для примера, если viewModel еще не обновлен, можно использовать временный список:
     val roles = viewModel.availableRoles // или listOf("NURSE", "DOCTOR", "SOCIAL_WORKER")
 
-    LaunchedEffect(signUpState) {
-        if (signUpState is SignUpScreenState.Success) {
-            // Навигация после успешной регистрации
+    LaunchedEffect(signUpState.response) {
+        if (signUpState.response != null) {
+            // Navigation after successful registration
             onSignUpSuccessNavigation()
         }
     }
@@ -48,7 +49,7 @@ fun SignUpScreen(
             label = { Text("Username") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
-            isError = signUpState is SignUpScreenState.Error && (signUpState as SignUpScreenState.Error).message.contains("Имя пользователя", ignoreCase = true)
+            isError = signUpState.errorMessage?.contains("Username", ignoreCase = true) == true
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -59,7 +60,7 @@ fun SignUpScreen(
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             modifier = Modifier.fillMaxWidth(),
-            isError = signUpState is SignUpScreenState.Error && (signUpState as SignUpScreenState.Error).message.contains("email", ignoreCase = true)
+            isError = signUpState.errorMessage?.contains("email", ignoreCase = true) == true
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -71,7 +72,7 @@ fun SignUpScreen(
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
-            isError = signUpState is SignUpScreenState.Error && (signUpState as SignUpScreenState.Error).message.contains("Пароль", ignoreCase = true)
+            isError = signUpState.errorMessage?.contains("Password", ignoreCase = true) == true
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -83,7 +84,7 @@ fun SignUpScreen(
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
-            isError = signUpState is SignUpScreenState.Error && (signUpState as SignUpScreenState.Error).message.contains("Пароли не совпадают", ignoreCase = true)
+            isError = signUpState.errorMessage?.contains("Passwords do not match", ignoreCase = true) == true
         )
         Spacer(modifier = Modifier.height(16.dp))
         Spacer(modifier = Modifier.height(8.dp))
@@ -118,10 +119,10 @@ fun SignUpScreen(
 
         Button(
             onClick = { viewModel.signUp() },
-            enabled = signUpState !is SignUpScreenState.Loading,
+            enabled = !signUpState.isLoading,
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (signUpState is SignUpScreenState.Loading) {
+            if (signUpState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
             } else {
                 Text("Sign Up")
@@ -133,18 +134,16 @@ fun SignUpScreen(
             Text("Already have an account? Login")
         }
 
-        // Отображение сообщений об ошибках или успехе
-        when (val state = signUpState) {
-            is SignUpScreenState.Error -> {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(state.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            is SignUpScreenState.Success -> {
-                // Сообщение об успехе (можно убрать, если есть навигация и/или Snackbar)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(state.response.message, color = MaterialTheme.colorScheme.primary)
-            }
-            else -> {} // Idle, Loading
+        // Display error or success messages
+        signUpState.errorMessage?.let { errorMessage ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
+        signUpState.response?.let { response ->
+            // Success message (can be removed if there's navigation and/or Snackbar)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(response.message, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

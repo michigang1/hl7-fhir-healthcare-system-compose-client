@@ -1,4 +1,4 @@
-package presentation
+package ui.screens.patient
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,57 +22,94 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import data.model.DiagnosisDto
+import data.model.MedicationDto
 import data.model.PatientDto
+import presentation.viewmodel.DiagnosisViewModel
+import presentation.viewmodel.MedicationViewModel
+import presentation.viewmodel.PatientViewModel
+import java.time.format.DateTimeFormatter
 
 
 typealias OnDialogDismissRequest = () -> Unit
 typealias OnPatientAddRequest = (patient: PatientDto) -> Unit
 
 @Composable
-fun PatientsScreen(viewModel: PatientViewModel) {
-    val uiState = viewModel.uiState // Введение переменной для uiState
+fun PatientsScreen(
+    patientViewModel: PatientViewModel,
+    medicationViewModel: MedicationViewModel,
+    diagnosisViewModel: DiagnosisViewModel
+) {
+    val patientState = patientViewModel.state
+    val medicationState = medicationViewModel.state
+    val diagnosisState = diagnosisViewModel.state
+
+    // Грузим пациентов только при первом запуске
+    LaunchedEffect(Unit) {
+        patientViewModel.loadPatients()
+    }
+
+    // Watch for changes in the selected patient - load medications and diagnoses
+    LaunchedEffect(patientState.selectedPatient?.id) {
+        val selectedId = patientState.selectedPatient?.id
+        if (selectedId != null) {
+            medicationViewModel.loadMedicationsForPatient(selectedId)
+            diagnosisViewModel.loadDiagnosesForPatient(selectedId)
+        }
+    }
 
     Row(Modifier.fillMaxSize()) {
         PatientListPane(
             modifier = Modifier
                 .weight(0.33f)
                 .fillMaxHeight()
-                // Убрано боковое правое padding, так как VerticalDivider теперь его заменяет
                 .padding(top = 8.dp, start = 8.dp, bottom = 8.dp),
-            patients = uiState.patientsList,
-            selectedPatient = uiState.selectedPatient,
-            isDetailPaneEditing = uiState.isEditing,
-            onAddPatient = { viewModel.openAddPatientDialog() },
-            onPatientSelect = { patient -> viewModel.selectPatient(patient.id) },
-            onPatientDelete = { patient -> viewModel.deletePatient(patient.id) }
+            patients = patientState.patientsList,
+            selectedPatient = patientState.selectedPatient,
+            isDetailPaneEditing = patientState.isEditing,
+            onAddPatient = { patientViewModel.openAddPatientDialog() },
+            onPatientSelect = { patient -> patientViewModel.selectPatient(patient.id) },
+            onPatientDelete = { patient -> patientViewModel.deletePatient(patient.id) }
         )
 
         VerticalDivider(
             modifier = Modifier.fillMaxHeight().width(1.dp),
-            thickness = 1.dp, // Можно сделать еще тоньше, например 0.5.dp
-            color = MaterialTheme.colorScheme.outlineVariant // Используем нейтральный цвет
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
         )
 
         PatientDetailPane(
             modifier = Modifier
                 .weight(0.67f)
                 .fillMaxHeight()
-                // Убрано боковое левое padding
                 .padding(top = 8.dp, end = 8.dp, bottom = 8.dp),
-            patientToDisplay = if (uiState.isEditing) uiState.draftPatient else uiState.selectedPatient,
-            isEditing = uiState.isEditing,
-            onEditToggle = { viewModel.startEditing() },
-            onSave = { viewModel.saveChanges() },
-            onCancel = { viewModel.cancelEditing() },
-            onFieldChange = { update -> viewModel.updateDraftPatient(update) }
+            patientToDisplay = if (patientState.isEditing) patientState.draftPatient else patientState.selectedPatient,
+            isEditing = patientState.isEditing,
+            onEditToggle = { patientViewModel.startEditing() },
+            onSave = { patientViewModel.saveChanges() },
+            onCancel = { patientViewModel.cancelEditing() },
+            onFieldChange = { update -> patientViewModel.updateDraftPatient(update) },
+            medications = medicationState.medicationsForPatientList,
+            diagnoses = diagnosisState.diagnosesForPatientList
         )
     }
 
-    if (uiState.showAddPatientDialog) {
+    if (patientState.showAddPatientDialog) {
         AddPatientDialog(
-            onDismiss = { viewModel.closeAddPatientDialog() },
-            onAddPatient = { patient -> viewModel.addPatient(patient) }
+            onDismiss = { patientViewModel.closeAddPatientDialog() },
+            onAddPatient = { patient -> patientViewModel.addPatient(patient) }
         )
+    }
+
+    // All alerts - as short as possible
+    patientState.errorMessage?.let { message ->
+        SimpleAlertDialog(message) { patientViewModel.clearErrorMessage() }
+    }
+    medicationState.errorMessage?.let { message ->
+        SimpleAlertDialog("Medication: $message") { medicationViewModel.clearErrorMessage() }
+    }
+    diagnosisState.errorMessage?.let { message ->
+        SimpleAlertDialog("Diagnosis: $message") { diagnosisViewModel.clearErrorMessage() }
     }
 }
 
@@ -129,20 +166,31 @@ private fun PatientDetailPane(
     onEditToggle: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    onFieldChange: ((PatientDto) -> PatientDto) -> Unit
+    onFieldChange: ((PatientDto) -> PatientDto) -> Unit,
+    medications: List<MedicationDto>,
+    diagnoses: List<DiagnosisDto>
+
 ) {
     Box(
         modifier = modifier.padding(horizontal = 8.dp), // Добавлен общий горизонтальный padding
         contentAlignment = Alignment.TopStart
     ) {
         if (patientToDisplay != null) {
+            // Предполагается, что вы будете получать эти списки из PatientDto или ViewModel
+            val exampleMedications =
+                listOf("Medication A: 10mg daily", "Medication B: 5mg twice a day", "Supplement C: 1 tablet daily")
+            val exampleDiagnoses =
+                listOf("Diagnosis X: Confirmed 2023-01-15", "Condition Y: Monitored since 2022-11-20")
+
             PatientDetailCard( // PatientDetailCard будет использовать свой внутренний padding
                 patient = patientToDisplay,
                 isEditing = isEditing,
                 onEditToggle = onEditToggle,
                 onSave = onSave,
                 onCancel = onCancel,
-                onFieldChange = onFieldChange
+                onFieldChange = onFieldChange,
+                medications = medications, // Передаем пример данных
+                diagnoses = diagnoses    // Передаем пример данных
             )
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -161,7 +209,7 @@ private fun PatientListItem(
     isSelected: Boolean,
     onPatientClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    isDetailPaneEditing: Boolean // Получаем состояние редактирования панели деталей
+    isDetailPaneEditing: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -256,13 +304,87 @@ private fun PatientDetailCardHeader(
 }
 
 @Composable
+private fun PatientSectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun PatientMedicationsTable(medications: List<MedicationDto>) { // Обновленный тип
+    Column {
+        if (medications.isEmpty()) {
+            Text("No medications.")
+            return
+        }
+        // Заголовки таблицы
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+            Text("Name", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+            Text("Dosage", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+            Text("Frequency", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+            Text("Star Date", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
+            Text("End Date", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
+            Text("Prescribed By", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+        }
+        HorizontalDivider()
+        medications.forEach { med ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Text(med.medicationName, modifier = Modifier.weight(1f))
+                Text(med.dosage, modifier = Modifier.weight(1f))
+                Text(med.frequency, modifier = Modifier.weight(1f))
+                Text(med.startDate.format(DateTimeFormatter.ISO_LOCAL_DATE), modifier = Modifier.weight(0.7f))
+                Text(med.endDate.format(DateTimeFormatter.ISO_LOCAL_DATE), modifier = Modifier.weight(0.7f))
+                Text(med.prescribedBy, modifier = Modifier.weight(1f))
+            }
+            HorizontalDivider()
+        }
+    }
+}
+
+
+@Composable
+private fun PatientDiagnosesTable(diagnoses: List<DiagnosisDto>) { // Обновленный тип
+    Column {
+        if (diagnoses.isEmpty()) {
+            Text("No diagnoses.")
+            return
+        }
+        // Заголовки таблицы
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+            Text("Code", modifier = Modifier.weight(0.5f), style = MaterialTheme.typography.labelSmall)
+            Text("Descritpion", modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.labelSmall)
+            Text("Date", modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
+            Text("isPrimary", modifier = Modifier.weight(0.6f), style = MaterialTheme.typography.labelSmall)
+            Text("Prescribed By", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+        }
+        HorizontalDivider()
+        diagnoses.forEach { diagnosis ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Text(diagnosis.diagnosisCode, modifier = Modifier.weight(0.5f))
+                Text(diagnosis.description, modifier = Modifier.weight(1.5f))
+                Text(diagnosis.date.format(DateTimeFormatter.ISO_LOCAL_DATE), modifier = Modifier.weight(0.7f))
+                Text(if (diagnosis.isPrimary) "Да" else "Нет", modifier = Modifier.weight(0.6f))
+                Text(diagnosis.prescribedBy, modifier = Modifier.weight(1f))
+            }
+            HorizontalDivider()
+        }
+    }
+}
+
+
+@Composable
 private fun PatientDetailCard(
     patient: PatientDto,
     isEditing: Boolean,
     onEditToggle: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    onFieldChange: ((PatientDto) -> PatientDto) -> Unit
+    onFieldChange: ((PatientDto) -> PatientDto) -> Unit,
+    medications: List<MedicationDto>,
+    diagnoses: List<DiagnosisDto>
 ) {
     Card(modifier = Modifier.fillMaxSize().padding(top = 8.dp /* Если нужен отступ сверху внутри панели */)) {
         Column(
@@ -311,6 +433,21 @@ private fun PatientDetailCard(
             EditableInfoRow("Identifier", patient.identifier.toString(), isEditing) { updatedValue ->
                 onFieldChange { it.copy(identifier = updatedValue.toLongOrNull() ?: it.identifier) }
             }
+
+            // Новые секции для медикаментов и диагнозов
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+            PatientMedicationsTable(medications = medications)
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+            PatientDiagnosesTable(diagnoses = diagnoses)
         }
     }
 }
@@ -529,4 +666,16 @@ fun EditableInfoRow(
             )
         }
     }
+}
+
+@Composable
+fun SimpleAlertDialog(text: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Error") },
+        text = { Text(text) },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("OK") }
+        }
+    )
 }

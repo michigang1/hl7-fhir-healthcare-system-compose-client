@@ -1,4 +1,4 @@
-package data
+package data.remote.services
 
 import data.model.PatientRequest
 import data.model.PatientResponse
@@ -13,7 +13,7 @@ import retrofit2.http.Path
 interface PatientApiService {
 
     @GET("patients")
-    suspend fun getAllPatients(): Response<List<List<PatientResponse>>> // Бэкенд возвращает Flux<List<PatientResponse>>, что для клиента будет одним списком
+    suspend fun getAllPatients(): Response<List<PatientResponse>>
 
     @GET("patients/{id}")
     suspend fun getPatientById(@Path("id") id: Long): Response<PatientResponse>

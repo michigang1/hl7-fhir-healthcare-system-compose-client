@@ -1,4 +1,4 @@
-package data
+package data.remote.services
 
 import data.model.JwtResponse
 import data.model.LoginRequest
