@@ -1,10 +1,10 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
-    kotlin("jvm") version "2.0.0" // Явно указываем версию Kotlin
-    kotlin("plugin.serialization") version "2.0.0" // Добавляем плагин для kotlinx-serialization
-    id("org.jetbrains.compose") version "1.6.10"
-    id("org.jetbrains.kotlin.plugin.compose") version  "2.0.0"
+    kotlin("jvm") version "2.1.0"
+    kotlin("plugin.serialization") version "2.1.0"
+    id("org.jetbrains.compose") version "1.8.1"
+    id("org.jetbrains.kotlin.plugin.compose") version  "2.1.0"
 }
 
 group = "michigang1.healthcare"
@@ -39,6 +39,9 @@ dependencies {
     // Compose Desktop Dependencies
     implementation(compose.desktop.currentOs) // Основная зависимость, включает ui, foundation, runtime
     implementation(compose.material3)      // Рекомендуется использовать Material 3
+    implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
+    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+    implementation("org.jetbrains.compose.material:material-icons-extended-desktop:1.7.3") // Material Icons Extended
 }
 
 compose.desktop {
@@ -55,4 +58,5 @@ compose.desktop {
 
 kotlin {
     jvmToolchain(18)
+
 }

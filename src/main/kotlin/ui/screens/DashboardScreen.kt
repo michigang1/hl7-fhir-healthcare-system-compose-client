@@ -1,4 +1,4 @@
-package presentation // Или ваша папка для экранов, например, screens
+package ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons

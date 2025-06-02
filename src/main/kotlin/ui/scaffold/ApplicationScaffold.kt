@@ -12,9 +12,12 @@ import presentation.*
 import presentation.viewmodel.DiagnosisViewModel
 import presentation.viewmodel.MedicationViewModel
 import presentation.viewmodel.PatientViewModel
+import presentation.viewmodel.CarePlanViewModel
 import ui.components.NavButton
 import ui.components.PlaceholderScreen
+import ui.screens.DashboardScreen
 import ui.screens.patient.PatientsScreen
+import ui.screens.patient.CarePlanScreen
 import utils.TokenManager
 
 /**
@@ -128,7 +131,25 @@ private fun ApplicationContent(
                 DiagnosisViewModel(RetrofitClient.diagnosisApiService)
             )
             AppScreen.PROFILE -> PlaceholderScreen("User Profile Screen")
-            // Add other screens here
+            AppScreen.CAREPLANS -> {
+                // Get the first patient ID for demonstration purposes
+                // In a real app, you might want to pass a selected patient ID
+                val patientViewModel = PatientViewModel(RetrofitClient.patientApiService)
+                val carePlanViewModel = CarePlanViewModel(
+                    RetrofitClient.carePlanApiService,
+                    RetrofitClient.patientApiService
+                )
+
+                // For now, we'll use a placeholder patient ID
+                // This should be replaced with actual patient selection logic
+                val patientId = 1L
+
+                CarePlanScreen(
+                    patientViewModel = patientViewModel,
+                    carePlanViewModel = carePlanViewModel,
+                    patientId = patientId
+                )
+            }
         }
     }
 }
