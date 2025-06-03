@@ -10,6 +10,7 @@ import data.remote.RetrofitClient
 import ui.navigation.AppScreen
 import presentation.*
 import presentation.viewmodel.DiagnosisViewModel
+import presentation.viewmodel.EventViewModel
 import presentation.viewmodel.MedicationViewModel
 import presentation.viewmodel.PatientViewModel
 import presentation.viewmodel.CarePlanViewModel
@@ -124,7 +125,15 @@ private fun ApplicationContent(
 ) {
     Box(modifier) {
         when (currentScreen) {
-            AppScreen.DASHBOARD -> DashboardScreen()
+            AppScreen.DASHBOARD -> DashboardScreen(
+                carePlanViewModel = CarePlanViewModel(
+                    RetrofitClient.carePlanApiService,
+                    RetrofitClient.patientApiService
+                ),
+                eventViewModel = EventViewModel(
+                    RetrofitClient.eventApiService
+                )
+            )
             AppScreen.PATIENTS -> PatientsScreen(
                 PatientViewModel(RetrofitClient.patientApiService),
                 MedicationViewModel(RetrofitClient.medicationApiService),

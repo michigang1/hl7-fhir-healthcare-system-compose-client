@@ -5,6 +5,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import data.remote.services.AuthApiService
 import data.remote.services.CarePlanApiService
 import data.remote.services.DiagnosisApiService
+import data.remote.services.EventApiService
 import data.remote.services.MedicationApiService
 import data.remote.services.PatientApiService
 import kotlinx.serialization.json.Json
@@ -90,6 +91,10 @@ object RetrofitClient {
 
     val carePlanApiService: CarePlanApiService by lazy {
         retrofit.create(CarePlanApiService::class.java)
+    }
+
+    val eventApiService: EventApiService by lazy {
+        retrofit.create(EventApiService::class.java)
     }
 
 }
