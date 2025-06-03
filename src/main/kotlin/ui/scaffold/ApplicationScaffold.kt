@@ -9,6 +9,7 @@ import data.model.JwtResponse
 import data.remote.RetrofitClient
 import ui.navigation.AppScreen
 import presentation.*
+import presentation.viewmodel.AuditViewModel
 import presentation.viewmodel.DiagnosisViewModel
 import presentation.viewmodel.EventViewModel
 import presentation.viewmodel.MedicationViewModel
@@ -17,6 +18,7 @@ import presentation.viewmodel.CarePlanViewModel
 import ui.components.NavButton
 import ui.components.PlaceholderScreen
 import ui.screens.DashboardScreen
+import ui.screens.JournalScreen
 import ui.screens.patient.PatientsScreen
 import ui.screens.patient.CarePlanScreen
 import utils.TokenManager
@@ -157,6 +159,13 @@ private fun ApplicationContent(
                     patientViewModel = patientViewModel,
                     carePlanViewModel = carePlanViewModel,
                     patientId = patientId
+                )
+            }
+            AppScreen.JOURNAL -> {
+                JournalScreen(
+                    auditViewModel = AuditViewModel(
+                        RetrofitClient.auditApiService
+                    )
                 )
             }
         }

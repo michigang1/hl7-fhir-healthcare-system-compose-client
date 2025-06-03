@@ -2,6 +2,7 @@ package data.remote
 
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import data.remote.services.AuditApiService
 import data.remote.services.AuthApiService
 import data.remote.services.CarePlanApiService
 import data.remote.services.DiagnosisApiService
@@ -95,6 +96,10 @@ object RetrofitClient {
 
     val eventApiService: EventApiService by lazy {
         retrofit.create(EventApiService::class.java)
+    }
+
+    val auditApiService: AuditApiService by lazy {
+        retrofit.create(AuditApiService::class.java)
     }
 
 }

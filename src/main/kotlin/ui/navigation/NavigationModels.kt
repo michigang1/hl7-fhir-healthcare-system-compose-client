@@ -9,7 +9,8 @@ enum class AppScreen(val title: String) {
     DASHBOARD("Dashboard"),
     PATIENTS("Patients"), // Example of additional screen
     PROFILE("Profile"),   // Another example
-    CAREPLANS("Care Plans") // Care plans screen
+    CAREPLANS("Care Plans"), // Care plans screen
+    JOURNAL("Journal") // Audit journal screen
 }
 
 /**
