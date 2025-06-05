@@ -23,9 +23,27 @@ data class AuditEvent(
     val eventType: String
         get() {
             // Try to extract event type from data
+            // Handle the new format where keys are enclosed in curly braces
             val eventTypeFromData = data.entries.joinToString(", ") { (key, value) ->
-                if (value != null) "$key: $value" else key
+                // Extract the actual event type from the key if it's enclosed in curly braces
+                val actualKey = if (key.startsWith("{") && key.endsWith("}")) {
+                    key.substring(1, key.length - 1)
+                } else {
+                    key
+                }
+
+                if (value != null) "$actualKey: $value" else actualKey
             }
             return if (eventTypeFromData.isNotEmpty()) eventTypeFromData else eventTypeRaw
+        }
+
+    // Determine if the event represents a successful operation
+    val isSuccess: Boolean
+        get() {
+            // Check if the event type contains "SUCCESS" and doesn't contain "FAILURE"
+            return (eventType.contains("SUCCESS", ignoreCase = true) || 
+                   eventType.contains("success", ignoreCase = true)) && 
+                   !eventType.contains("FAILURE", ignoreCase = true) &&
+                   !eventType.contains("failure", ignoreCase = true)
         }
 }

@@ -14,6 +14,6 @@ data class PatientDto(
     val email: String,
     val phone: String,
     val identifier: Long,
-    val organizationId: Long
-
+    val organizationId: Long,
+    val syncStatus: String = "SYNCED" // SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
 )

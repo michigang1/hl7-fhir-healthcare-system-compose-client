@@ -18,5 +18,6 @@ data class MedicationDto(
     val startDate: LocalDate,
     @Serializable(with = LocalDateSerializer::class)
     val endDate: LocalDate,
-    val prescribedBy: String
+    val prescribedBy: String,
+    val syncStatus: String = "SYNCED" // SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
 )

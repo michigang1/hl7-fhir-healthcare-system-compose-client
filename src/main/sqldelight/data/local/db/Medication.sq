@@ -1,0 +1,61 @@
+CREATE TABLE Medication (
+    id INTEGER PRIMARY KEY,
+    patientId INTEGER NOT NULL,
+    medicationName TEXT NOT NULL,
+    dosage TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    startDate TEXT NOT NULL,
+    endDate TEXT NOT NULL,
+    prescribedBy TEXT NOT NULL,
+    syncStatus TEXT NOT NULL DEFAULT 'SYNCED', -- SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
+    FOREIGN KEY (patientId) REFERENCES Patient(id)
+);
+
+-- Get all medications
+getAllMedications:
+SELECT * FROM Medication WHERE syncStatus != 'PENDING_DELETE';
+
+-- Get medications for a patient
+getMedicationsForPatient:
+SELECT * FROM Medication WHERE patientId = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Get a medication by ID
+getMedicationById:
+SELECT * FROM Medication WHERE id = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Insert a new medication
+insertMedication:
+INSERT INTO Medication(id, patientId, medicationName, dosage, frequency, startDate, endDate, prescribedBy, syncStatus)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Update an existing medication
+updateMedication:
+UPDATE Medication
+SET patientId = ?, medicationName = ?, dosage = ?, frequency = ?, startDate = ?, endDate = ?, prescribedBy = ?, syncStatus = ?
+WHERE id = ?;
+
+-- Mark a medication for deletion
+markMedicationForDeletion:
+UPDATE Medication
+SET syncStatus = 'PENDING_DELETE'
+WHERE id = ?;
+
+-- Delete a medication
+deleteMedication:
+DELETE FROM Medication
+WHERE id = ?;
+
+-- Get all medications that need to be synced
+getMedicationsToSync:
+SELECT * FROM Medication WHERE syncStatus != 'SYNCED';
+
+-- Update sync status
+updateSyncStatus:
+UPDATE Medication
+SET syncStatus = ?
+WHERE id = ?;
+
+-- Delete all unsynchronized medications (those with PENDING_CREATE, PENDING_UPDATE, or PENDING_DELETE status)
+deleteUnsynchronizedMedications:
+DELETE FROM Medication
+WHERE syncStatus != 'SYNCED';

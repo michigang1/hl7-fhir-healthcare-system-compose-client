@@ -6,8 +6,11 @@ import androidx.compose.runtime.setValue
 import data.model.DiagnosisDto
 import data.model.DiagnosisRequest
 import data.model.DiagnosisResponse
-import data.remote.services.DiagnosisApiService
+import data.repository.DiagnosisRepository
+import data.sync.SynchronizationManager
+import data.sync.SyncStatus
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import presentation.state.DiagnosisState
 import java.io.IOException
 import java.time.LocalDate
@@ -16,7 +19,8 @@ import java.time.LocalDate
  * ViewModel for the diagnosis screen.
  */
 class DiagnosisViewModel(
-    private val diagnosisApiService: DiagnosisApiService,
+    private val diagnosisRepository: DiagnosisRepository,
+    private val synchronizationManager: SynchronizationManager,
     private val mainDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -24,6 +28,41 @@ class DiagnosisViewModel(
         private set
 
     private val viewModelScope = CoroutineScope(mainDispatcher + SupervisorJob())
+
+    init {
+        // Check for pending changes on initialization
+        viewModelScope.launch {
+            checkForPendingChanges()
+        }
+
+        // Observe network connectivity
+        viewModelScope.launch {
+            synchronizationManager.isNetworkAvailable.collectLatest { isAvailable ->
+                state = state.copy(isNetworkAvailable = isAvailable)
+
+                // If network becomes available and we have pending changes, show sync notification
+                if (isAvailable && state.hasPendingChanges) {
+                    state = state.copy(showSyncNotification = true)
+                }
+            }
+        }
+
+        // Observe synchronization status
+        viewModelScope.launch {
+            synchronizationManager.syncStatus.collectLatest { status ->
+                state = state.copy(syncStatus = status)
+
+                // If sync completed successfully, refresh data and hide notification
+                if (status == SyncStatus.COMPLETED) {
+                    refreshData()
+                    state = state.copy(
+                        hasPendingChanges = false,
+                        showSyncNotification = false
+                    )
+                }
+            }
+        }
+    }
 
     companion object {
         const val NEW_DIAGNOSIS_ID = 0L
@@ -44,7 +83,7 @@ class DiagnosisViewModel(
 
     private fun DiagnosisDto.toDiagnosisRequest(): DiagnosisRequest {
         return DiagnosisRequest(
-            id =  this.patientId,
+            id = this.patientId,
             code = this.diagnosisCode,
             isPrimary = this.isPrimary,
             description = this.description,
@@ -53,25 +92,13 @@ class DiagnosisViewModel(
         )
     }
 
-    // --- fetch and map ---
-    private suspend fun fetchAndMapDiagnoses(patientId: Long): List<DiagnosisDto> {
-        val response = withContext(ioDispatcher) {
-            diagnosisApiService.getAllDiagnosesByPatient(patientId)
-        }
-        if (response.isSuccessful) {
-            return response.body()?.map { it.toDiagnosisDto() } ?: emptyList()
-        } else {
-            throw IOException("Error loading diagnoses: ${response.code()} ${response.message()}")
-        }
-    }
-
     // --- API Calls ---
     fun loadDiagnosesForPatient(patientId: Long) {
         state = state.copy(currentPatientIdForContext = patientId)
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val diagnoses = fetchAndMapDiagnoses(patientId)
+                val diagnoses = diagnosisRepository.getDiagnosesForPatient(patientId)
                 state = state.copy(
                     diagnosesForPatientList = diagnoses,
                     isLoading = false
@@ -88,16 +115,10 @@ class DiagnosisViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val response = withContext(ioDispatcher) { diagnosisApiService.getAllDiagnoses() }
-                if (response.isSuccessful) {
-                    val diagnoses = response.body()?.map { it.toDiagnosisDto() } ?: emptyList()
-                    state = state.copy(allDiagnosesList = diagnoses, isLoading = false)
-                } else {
-                    state = state.copy(
-                        errorMessage = "Error loading all diagnoses: ${response.code()}",
-                        isLoading = false
-                    )
-                }
+                val diagnoses = diagnosisRepository.getAllDiagnoses()
+                state = state.copy(allDiagnosesList = diagnoses, isLoading = false)
+            } catch (e: IOException) {
+                state = state.copy(errorMessage = "Network error: ${e.message}", isLoading = false)
             } catch (e: Exception) {
                 state = state.copy(errorMessage = "Exception loading all diagnoses: ${e.message}", isLoading = false)
             }
@@ -162,39 +183,39 @@ class DiagnosisViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val response = if (isNew) {
-                    withContext(ioDispatcher) {
-                        diagnosisApiService.createDiagnosis(
-                            diagnosisToSave.toDiagnosisRequest()
-                        )
-                    }
+                val savedDiagnosis = if (isNew) {
+                    diagnosisRepository.createDiagnosis(diagnosisToSave.toDiagnosisRequest())
                 } else {
-                    withContext(ioDispatcher) {
-                        diagnosisApiService.updateDiagnosis(
-                            diagnosisToSave.patientId,
-                            diagnosisToSave.id,
-                            diagnosisToSave.toDiagnosisRequest()
-                        )
-                    }
+                    diagnosisRepository.updateDiagnosis(
+                        diagnosisToSave.patientId,
+                        diagnosisToSave.id,
+                        diagnosisToSave.toDiagnosisRequest()
+                    )
                 }
 
-                if (response.isSuccessful) {
-                    refreshDiagnosesListForCurrentPatient()
-                    state = state.copy(
-                        isLoading = false,
-                        showAddOrEditDialog = false,
-                        isEditing = false,
-                        draftDiagnosis = null,
-                        selectedDiagnosis = response.body()?.toDiagnosisDto() ?: state.selectedDiagnosis
-                    )
-                } else {
-                    state = state.copy(
-                        errorMessage = "Error saving diagnosis: ${response.code()} ${response.message()}",
-                        isLoading = false
-                    )
-                }
+                refreshDiagnosesListForCurrentPatient()
+                state = state.copy(
+                    isLoading = false,
+                    showAddOrEditDialog = false,
+                    isEditing = false,
+                    draftDiagnosis = null,
+                    selectedDiagnosis = savedDiagnosis
+                )
+
+                // Check for pending changes after successful save
+                checkForPendingChanges()
+            } catch (e: IOException) {
+                state = state.copy(errorMessage = "Network error: ${e.message}", isLoading = false)
+
+                // Check for pending changes after network error
+                // This is important because the repository will store changes locally
+                checkForPendingChanges()
             } catch (e: Exception) {
                 state = state.copy(errorMessage = "Exception saving diagnosis: ${e.message}", isLoading = false)
+
+                // Check for pending changes after other errors
+                // This is important because the repository might store changes locally
+                checkForPendingChanges()
             }
         }
     }
@@ -205,10 +226,8 @@ class DiagnosisViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val response = withContext(ioDispatcher) {
-                    diagnosisApiService.deleteDiagnosis(patientId, diagnosisId)
-                }
-                if (response.isSuccessful && response.body() == true) {
+                val success = diagnosisRepository.deleteDiagnosis(patientId, diagnosisId)
+                if (success) {
                     refreshDiagnosesListForCurrentPatient()
                     state = state.copy(
                         isLoading = false,
@@ -218,10 +237,12 @@ class DiagnosisViewModel(
                     )
                 } else {
                     state = state.copy(
-                        errorMessage = "Error deleting diagnosis: ${response.code()} ${response.message()} (Success: ${response.body()})",
+                        errorMessage = "Error deleting diagnosis",
                         isLoading = false
                     )
                 }
+            } catch (e: IOException) {
+                state = state.copy(errorMessage = "Network error: ${e.message}", isLoading = false)
             } catch (e: Exception) {
                 state = state.copy(errorMessage = "Exception deleting diagnosis: ${e.message}", isLoading = false)
             }
@@ -230,6 +251,73 @@ class DiagnosisViewModel(
 
     fun clearErrorMessage() {
         state = state.copy(errorMessage = null)
+    }
+
+    /**
+     * Refreshes data based on the current context.
+     */
+    private fun refreshData() {
+        state.currentPatientIdForContext?.let {
+            loadDiagnosesForPatient(it)
+        } ?: loadAllDiagnosesGlobally()
+    }
+
+    /**
+     * Checks if there are pending changes that need to be synchronized.
+     * This is called after operations that might create pending changes.
+     */
+    private suspend fun checkForPendingChanges() {
+        val diagnosesToSync = withContext(ioDispatcher) {
+            diagnosisRepository.getDiagnosesToSync()
+        }
+
+        state = state.copy(
+            hasPendingChanges = diagnosesToSync.isNotEmpty(),
+            showSyncNotification = diagnosesToSync.isNotEmpty() && state.isNetworkAvailable
+        )
+    }
+
+    /**
+     * Manually triggers synchronization.
+     */
+    fun triggerSynchronization() {
+        if (state.syncStatus == SyncStatus.SYNCING) return
+
+        synchronizationManager.triggerSynchronization()
+        state = state.copy(showSyncNotification = false)
+    }
+
+    /**
+     * Dismisses the synchronization notification.
+     */
+    fun dismissSyncNotification() {
+        state = state.copy(showSyncNotification = false)
+    }
+
+    /**
+     * Deletes all unsynchronized diagnoses from the local database.
+     * This includes diagnoses with PENDING_CREATE, PENDING_UPDATE, or PENDING_DELETE status.
+     * 
+     * @return The number of diagnoses deleted
+     */
+    fun deleteUnsynchronizedDiagnoses() {
+        viewModelScope.launch {
+            state = state.copy(isLoading = true, errorMessage = null)
+            try {
+                val count = diagnosisRepository.deleteUnsynchronizedDiagnoses()
+                refreshData()
+                state = state.copy(
+                    isLoading = false,
+                    hasPendingChanges = false,
+                    showSyncNotification = false
+                )
+            } catch (e: Exception) {
+                state = state.copy(
+                    errorMessage = "Error deleting unsynchronized diagnoses: ${e.message}",
+                    isLoading = false
+                )
+            }
+        }
     }
 
     fun onCleared() {

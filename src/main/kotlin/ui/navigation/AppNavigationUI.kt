@@ -11,11 +11,13 @@ import ui.scaffold.MainApplicationScaffold
  * 
  * @param currentScreen The current screen to display
  * @param navigationController The navigation controller that manages navigation state and actions
+ * @param synchronizationManager The manager that handles data synchronization between local and remote
  */
 @Composable
 fun AppNavigation(
     currentScreen: Screen,
-    navigationController: NavigationController
+    navigationController: NavigationController,
+    synchronizationManager: data.sync.SynchronizationManager? = null
 ) {
     when (currentScreen) {
         is Screen.Login -> {
@@ -43,6 +45,7 @@ fun AppNavigation(
             MainApplicationScaffold(
                 jwtResponse = currentScreen.jwtResponse,
                 initialAppScreen = currentScreen.currentAppScreen,
+                synchronizationManager = synchronizationManager,
                 onNavigateToAppScreen = { newAppScreen ->
                     // Update MainApplication state with the newly selected AppScreen
                     navigationController.onNavigateToAppScreen(currentScreen.jwtResponse, newAppScreen)

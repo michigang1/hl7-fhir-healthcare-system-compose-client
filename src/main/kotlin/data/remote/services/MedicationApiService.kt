@@ -24,6 +24,12 @@ interface MedicationApiService {
         @Body request: MedicationRequest
     ): Response<MedicationResponse>
 
+    @POST("patients/{patientId}/medications")
+    suspend fun createMedication(
+        @Path("patientId") patientId: Long,
+        @Body request: MedicationRequest
+    ): Response<MedicationResponse>
+
     @PUT("patients/{patientId}/medications/{id}")
     suspend fun updateMedication(
         @Path("patientId") patientId: Long,

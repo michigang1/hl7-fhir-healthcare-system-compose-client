@@ -1,0 +1,48 @@
+CREATE TABLE AuditEvent (
+    id INTEGER PRIMARY KEY,
+    eventDate TEXT NOT NULL,
+    principal TEXT NOT NULL,
+    eventTypeRaw TEXT NOT NULL,
+    eventData TEXT NOT NULL, -- JSON string of the data map
+    syncStatus TEXT NOT NULL DEFAULT 'SYNCED' -- SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
+);
+
+-- Get all audit events
+getAllAuditEvents:
+SELECT * FROM AuditEvent WHERE syncStatus != 'PENDING_DELETE' ORDER BY eventDate DESC;
+
+-- Get an audit event by ID
+getAuditEventById:
+SELECT * FROM AuditEvent WHERE id = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Insert a new audit event
+insertAuditEvent:
+INSERT INTO AuditEvent(id, eventDate, principal, eventTypeRaw, eventData, syncStatus)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- Update an existing audit event
+updateAuditEvent:
+UPDATE AuditEvent
+SET eventDate = ?, principal = ?, eventTypeRaw = ?, eventData = ?, syncStatus = ?
+WHERE id = ?;
+
+-- Mark an audit event for deletion
+markAuditEventForDeletion:
+UPDATE AuditEvent
+SET syncStatus = 'PENDING_DELETE'
+WHERE id = ?;
+
+-- Delete an audit event
+deleteAuditEvent:
+DELETE FROM AuditEvent
+WHERE id = ?;
+
+-- Get all audit events that need to be synced
+getAuditEventsToSync:
+SELECT * FROM AuditEvent WHERE syncStatus != 'SYNCED';
+
+-- Update sync status
+updateSyncStatus:
+UPDATE AuditEvent
+SET syncStatus = ?
+WHERE id = ?;

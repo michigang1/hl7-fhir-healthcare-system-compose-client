@@ -1,0 +1,54 @@
+CREATE TABLE CarePlan (
+    id INTEGER PRIMARY KEY,
+    patientId INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    startDate TEXT NOT NULL,
+    endDate TEXT NOT NULL,
+    syncStatus TEXT NOT NULL DEFAULT 'SYNCED', -- SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
+    FOREIGN KEY (patientId) REFERENCES Patient(id)
+);
+
+-- Get all care plans
+getAllCarePlans:
+SELECT * FROM CarePlan WHERE syncStatus != 'PENDING_DELETE';
+
+-- Get care plans for a patient
+getCarePlansByPatient:
+SELECT * FROM CarePlan WHERE patientId = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Get a care plan by ID
+getCarePlanById:
+SELECT * FROM CarePlan WHERE id = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Insert a new care plan
+insertCarePlan:
+INSERT INTO CarePlan(id, patientId, title, description, startDate, endDate, syncStatus)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- Update an existing care plan
+updateCarePlan:
+UPDATE CarePlan
+SET patientId = ?, title = ?, description = ?, startDate = ?, endDate = ?, syncStatus = ?
+WHERE id = ?;
+
+-- Mark a care plan for deletion
+markCarePlanForDeletion:
+UPDATE CarePlan
+SET syncStatus = 'PENDING_DELETE'
+WHERE id = ?;
+
+-- Delete a care plan
+deleteCarePlan:
+DELETE FROM CarePlan
+WHERE id = ?;
+
+-- Get all care plans that need to be synced
+getCarePlansToSync:
+SELECT * FROM CarePlan WHERE syncStatus != 'SYNCED';
+
+-- Update sync status
+updateSyncStatus:
+UPDATE CarePlan
+SET syncStatus = ?
+WHERE id = ?;

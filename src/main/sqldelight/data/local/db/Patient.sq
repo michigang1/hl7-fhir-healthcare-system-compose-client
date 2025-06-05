@@ -1,0 +1,54 @@
+CREATE TABLE Patient (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    surname TEXT NOT NULL,
+    roomNo TEXT NOT NULL,
+    dateOfBirth TEXT NOT NULL,
+    gender TEXT NOT NULL,
+    address TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    identifier INTEGER NOT NULL,
+    organizationId INTEGER NOT NULL,
+    syncStatus TEXT NOT NULL DEFAULT 'SYNCED' -- SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
+);
+
+-- Get all patients
+getAllPatients:
+SELECT * FROM Patient WHERE syncStatus != 'PENDING_DELETE';
+
+-- Get a patient by ID
+getPatientById:
+SELECT * FROM Patient WHERE id = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Insert a new patient
+insertPatient:
+INSERT INTO Patient(id, name, surname, roomNo, dateOfBirth, gender, address, email, phone, identifier, organizationId, syncStatus)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Update an existing patient
+updatePatient:
+UPDATE Patient
+SET name = ?, surname = ?, roomNo = ?, dateOfBirth = ?, gender = ?, address = ?, email = ?, phone = ?, identifier = ?, organizationId = ?, syncStatus = ?
+WHERE id = ?;
+
+-- Mark a patient for deletion
+markPatientForDeletion:
+UPDATE Patient
+SET syncStatus = 'PENDING_DELETE'
+WHERE id = ?;
+
+-- Delete a patient
+deletePatient:
+DELETE FROM Patient
+WHERE id = ?;
+
+-- Get all patients that need to be synced
+getPatientsToSync:
+SELECT * FROM Patient WHERE syncStatus != 'SYNCED';
+
+-- Update sync status
+updateSyncStatus:
+UPDATE Patient
+SET syncStatus = ?
+WHERE id = ?;

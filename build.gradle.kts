@@ -5,6 +5,7 @@ plugins {
     kotlin("plugin.serialization") version "2.1.0"
     id("org.jetbrains.compose") version "1.8.1"
     id("org.jetbrains.kotlin.plugin.compose") version  "2.1.0"
+    id("app.cash.sqldelight") version "2.0.1"
 }
 
 group = "michigang1.healthcare"
@@ -36,6 +37,11 @@ dependencies {
     val koinVersion = "4.0.4"
     implementation("io.insert-koin:koin-core:$koinVersion")
 
+    // SQLDelight for local database
+    implementation("app.cash.sqldelight:runtime:2.0.1")
+    implementation("app.cash.sqldelight:coroutines-extensions:2.0.1")
+    implementation("app.cash.sqldelight:sqlite-driver:2.0.1")
+
     // Compose Desktop Dependencies
     implementation(compose.desktop.currentOs) // Основная зависимость, включает ui, foundation, runtime
     implementation(compose.material3)      // Рекомендуется использовать Material 3
@@ -58,5 +64,12 @@ compose.desktop {
 
 kotlin {
     jvmToolchain(18)
+}
 
+sqldelight {
+    databases {
+        create("HealthcareDatabase") {
+            packageName.set("data.local.db")
+        }
+    }
 }

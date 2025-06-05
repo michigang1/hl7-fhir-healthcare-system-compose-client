@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import presentation.state.LoginState
 import utils.TokenManager
+import utils.UserManager
 
 /**
  * ViewModel for the login screen.
@@ -54,13 +55,16 @@ class LoginViewModel(
                     apiService.login(LoginRequest(username, password))
                 }
 
-                if (retrofitResponse.isSuccessful && retrofitResponse.body() != null) {
-                    val jwtResponse = retrofitResponse.body()!!
+                if (retrofitResponse.isSuccessful) {
+                    // If the response is successful but the body is null, create a default JwtResponse
+                    val jwtResponse = retrofitResponse.body() ?: createDefaultJwtResponse(retrofitResponse.headers()["Authorization"])
                     TokenManager.setToken(jwtResponse.token) // Save token
+                    UserManager.setUser(jwtResponse) // Save user information
                     state = state.copy(isLoading = false, jwtResponse = jwtResponse)
                     onLoginSuccess(jwtResponse)
                 } else {
                     TokenManager.clearToken() // Clear token in case of error
+                    UserManager.clearUser() // Clear user information in case of error
                     state = state.copy(
                         isLoading = false,
                         errorMessage = "Login failed: ${retrofitResponse.message() ?: "Server error ${retrofitResponse.code()}"}"
@@ -68,6 +72,7 @@ class LoginViewModel(
                 }
             } catch (e: Exception) {
                 TokenManager.clearToken() // Clear token in case of error
+                UserManager.clearUser() // Clear user information in case of error
                 state = state.copy(
                     isLoading = false,
                     errorMessage = "Login failed: ${e.message ?: "Unknown error"}"
@@ -78,6 +83,26 @@ class LoginViewModel(
 
     fun clearError() {
         state = state.copy(errorMessage = null)
+    }
+
+    /**
+     * Creates a default JwtResponse when the response body is null.
+     * This is used when the server returns a successful response but with an empty body.
+     *
+     * @param authHeader The Authorization header from the response, which may contain the token
+     * @return A default JwtResponse object
+     */
+    private fun createDefaultJwtResponse(authHeader: String?): JwtResponse {
+        // Extract token from Authorization header if available
+        val token = authHeader?.removePrefix("Bearer ")?.trim() ?: username
+
+        return JwtResponse(
+            token = token,
+            id = 0L, // Default ID
+            username = username, // Use the username from the login request
+            email = "$username@example.com", // Default email
+            roles = listOf("USER") // Default role
+        )
     }
 
     fun onCleared() {

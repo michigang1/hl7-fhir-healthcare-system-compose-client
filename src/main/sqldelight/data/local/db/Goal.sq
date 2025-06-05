@@ -1,0 +1,54 @@
+CREATE TABLE Goal (
+    id INTEGER PRIMARY KEY,
+    patientId INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    duration TEXT NOT NULL,
+    syncStatus TEXT NOT NULL DEFAULT 'SYNCED', -- SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
+    FOREIGN KEY (patientId) REFERENCES Patient(id)
+);
+
+-- Get all goals
+getAllGoals:
+SELECT * FROM Goal WHERE syncStatus != 'PENDING_DELETE';
+
+-- Get goals for a patient
+getGoalsByPatient:
+SELECT * FROM Goal WHERE patientId = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Get a goal by ID
+getGoalById:
+SELECT * FROM Goal WHERE id = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Insert a new goal
+insertGoal:
+INSERT INTO Goal(id, patientId, name, description, frequency, duration, syncStatus)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- Update an existing goal
+updateGoal:
+UPDATE Goal
+SET patientId = ?, name = ?, description = ?, frequency = ?, duration = ?, syncStatus = ?
+WHERE id = ?;
+
+-- Mark a goal for deletion
+markGoalForDeletion:
+UPDATE Goal
+SET syncStatus = 'PENDING_DELETE'
+WHERE id = ?;
+
+-- Delete a goal
+deleteGoal:
+DELETE FROM Goal
+WHERE id = ?;
+
+-- Get all goals that need to be synced
+getGoalsToSync:
+SELECT * FROM Goal WHERE syncStatus != 'SYNCED';
+
+-- Update sync status
+updateSyncStatus:
+UPDATE Goal
+SET syncStatus = ?
+WHERE id = ?;

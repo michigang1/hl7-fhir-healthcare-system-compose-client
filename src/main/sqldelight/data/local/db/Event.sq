@@ -1,0 +1,79 @@
+CREATE TABLE Event (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    authorId INTEGER NOT NULL,
+    authorUsername TEXT NOT NULL,
+    eventDateTime TEXT NOT NULL,
+    syncStatus TEXT NOT NULL DEFAULT 'SYNCED' -- SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
+);
+
+CREATE TABLE EventPatient (
+    eventId INTEGER NOT NULL,
+    patientId INTEGER NOT NULL,
+    PRIMARY KEY (eventId, patientId),
+    FOREIGN KEY (eventId) REFERENCES Event(id),
+    FOREIGN KEY (patientId) REFERENCES Patient(id)
+);
+
+-- Get all events
+getAllEvents:
+SELECT * FROM Event WHERE syncStatus != 'PENDING_DELETE';
+
+-- Get an event by ID
+getEventById:
+SELECT * FROM Event WHERE id = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Get events for a patient
+getEventsByPatient:
+SELECT e.* FROM Event e
+JOIN EventPatient ep ON e.id = ep.eventId
+WHERE ep.patientId = ? AND e.syncStatus != 'PENDING_DELETE';
+
+-- Insert a new event
+insertEvent:
+INSERT INTO Event(id, name, description, authorId, authorUsername, eventDateTime, syncStatus)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- Insert a patient for an event
+insertEventPatient:
+INSERT INTO EventPatient(eventId, patientId)
+VALUES (?, ?);
+
+-- Update an existing event
+updateEvent:
+UPDATE Event
+SET name = ?, description = ?, authorId = ?, authorUsername = ?, eventDateTime = ?, syncStatus = ?
+WHERE id = ?;
+
+-- Mark an event for deletion
+markEventForDeletion:
+UPDATE Event
+SET syncStatus = 'PENDING_DELETE'
+WHERE id = ?;
+
+-- Delete an event
+deleteEvent:
+DELETE FROM Event
+WHERE id = ?;
+
+-- Delete all patients for an event
+deleteEventPatients:
+DELETE FROM EventPatient
+WHERE eventId = ?;
+
+-- Get all events that need to be synced
+getEventsToSync:
+SELECT * FROM Event WHERE syncStatus != 'SYNCED';
+
+-- Update sync status
+updateSyncStatus:
+UPDATE Event
+SET syncStatus = ?
+WHERE id = ?;
+
+-- Get patients for an event
+getPatientsByEvent:
+SELECT p.* FROM Patient p
+JOIN EventPatient ep ON p.id = ep.patientId
+WHERE ep.eventId = ? AND p.syncStatus != 'PENDING_DELETE';

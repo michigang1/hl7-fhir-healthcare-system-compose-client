@@ -16,5 +16,6 @@ data class DiagnosisDto(
     val description: String,
     @Serializable(with = LocalDateSerializer::class)
     val date: LocalDate,
-    val prescribedBy: String
+    val prescribedBy: String,
+    val syncStatus: String = "SYNCED" // SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
 )

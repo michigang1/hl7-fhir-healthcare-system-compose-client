@@ -5,9 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import data.model.EventDto
 import data.model.EventRequest
-import data.model.EventResponse
-import data.remote.services.EventApiService
+import data.repository.EventRepository
+import data.sync.SynchronizationManager
+import data.sync.SyncStatus
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import presentation.state.EventState
 import java.io.IOException
 import java.time.LocalDateTime
@@ -16,11 +18,47 @@ import java.time.LocalDateTime
  * ViewModel for managing events.
  */
 class EventViewModel(
-    private val eventApiService: EventApiService,
+    private val eventRepository: EventRepository,
+    private val synchronizationManager: SynchronizationManager,
     mainDispatcher: CoroutineDispatcher = Dispatchers.Default,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : BaseViewModel<EventState>(mainDispatcher, ioDispatcher) {
     override var state by mutableStateOf(EventState())
+
+    init {
+        // Check for pending changes on initialization
+        launchCoroutine {
+            checkForPendingChanges()
+        }
+
+        // Observe network connectivity
+        launchCoroutine {
+            synchronizationManager.isNetworkAvailable.collectLatest { isAvailable ->
+                state = state.copy(isNetworkAvailable = isAvailable)
+
+                // If network becomes available and we have pending changes, show sync notification
+                if (isAvailable && state.hasPendingChanges) {
+                    state = state.copy(showSyncNotification = true)
+                }
+            }
+        }
+
+        // Observe synchronization status
+        launchCoroutine {
+            synchronizationManager.syncStatus.collectLatest { status ->
+                state = state.copy(syncStatus = status)
+
+                // If sync completed successfully, refresh data and hide notification
+                if (status == SyncStatus.COMPLETED) {
+                    refreshData()
+                    state = state.copy(
+                        hasPendingChanges = false,
+                        showSyncNotification = false
+                    )
+                }
+            }
+        }
+    }
 
     /**
      * Loads all events.
@@ -65,30 +103,20 @@ class EventViewModel(
     }
 
     /**
-     * Fetches and maps all events from the API.
+     * Fetches and maps all events from the repository.
      */
     private suspend fun fetchAndMapEvents(): List<EventDto> {
-        val response = withContext(ioDispatcher) {
-            eventApiService.getAllEvents()
-        }
-        if (response.isSuccessful) {
-            return response.body()?.map { EventDto.fromEventResponse(it) }?.sortedBy { it.eventDateTime } ?: emptyList()
-        } else {
-            throw IOException("Error loading events: ${response.code()} ${response.message()}")
+        return withContext(ioDispatcher) {
+            eventRepository.getAllEvents()
         }
     }
 
     /**
-     * Fetches and maps events for a specific patient from the API.
+     * Fetches and maps events for a specific patient from the repository.
      */
     private suspend fun fetchAndMapEventsForPatient(patientId: Long): List<EventDto> {
-        val response = withContext(ioDispatcher) {
-            eventApiService.getEventsByPatient(patientId)
-        }
-        if (response.isSuccessful) {
-            return response.body()?.map { EventDto.fromEventResponse(it) }?.sortedBy { it.eventDateTime } ?: emptyList()
-        } else {
-            throw IOException("Error loading events for patient: ${response.code()} ${response.message()}")
+        return withContext(ioDispatcher) {
+            eventRepository.getEventsByPatient(patientId)
         }
     }
 
@@ -156,48 +184,59 @@ class EventViewModel(
         val patientId = state.currentPatientId ?: return
 
         launchCoroutine {
-            executeApiCall(
-                loadingState = { state.copy(isLoading = true, errorMessage = null) },
-                errorState = { error -> state.copy(errorMessage = "Error saving event: $error", isLoading = false) },
-                apiCall = {
-                    if (state.isEditing) {
-                        // Create EventRequest from EventDto
-                        val eventRequest = EventRequest(
-                            name = eventToSave.name,
-                            description = eventToSave.description,
-                            authorId = eventToSave.authorId,
-                            eventDateTime = eventToSave.eventDateTime,
-                            patientIds = eventToSave.patients.map { it.id }.toSet()
-                        )
-                        eventApiService.updateEvent(eventToSave.id, eventRequest)
-                    } else {
-                        // Create EventRequest from EventDto
-                        val eventRequest = EventRequest(
-                            name = eventToSave.name,
-                            description = eventToSave.description,
-                            authorId = eventToSave.authorId,
-                            eventDateTime = eventToSave.eventDateTime,
-                            patientIds = eventToSave.patients.map { it.id }.toSet()
-                        )
-                        eventApiService.createEvent(patientId, eventRequest)
-                    }
-                },
-                onSuccess = { eventResponse ->
-                    // Refresh events
-                    if (state.currentPatientId != null) {
-                        loadEventsForPatient(state.currentPatientId!!)
-                    } else {
-                        loadAllEvents()
-                    }
-                    state.copy(
-                        isLoading = false,
-                        showAddOrEditDialog = false,
-                        isEditing = false,
-                        draftEvent = null,
-                        selectedEvent = EventDto.fromEventResponse(eventResponse)
-                    )
+            state = state.copy(isLoading = true, errorMessage = null)
+            try {
+                // Create EventRequest from EventDto
+                val eventRequest = EventRequest(
+                    name = eventToSave.name,
+                    description = eventToSave.description,
+                    authorId = eventToSave.authorId,
+                    eventDateTime = eventToSave.eventDateTime,
+                    patientIds = eventToSave.patients.map { it.id }.toSet()
+                )
+
+                val savedEvent = if (state.isEditing) {
+                    eventRepository.updateEvent(eventToSave.id, eventRequest)
+                } else {
+                    eventRepository.createEvent(patientId, eventRequest)
                 }
-            )
+
+                // Refresh events
+                if (state.currentPatientId != null) {
+                    loadEventsForPatient(state.currentPatientId!!)
+                } else {
+                    loadAllEvents()
+                }
+
+                state = state.copy(
+                    isLoading = false,
+                    showAddOrEditDialog = false,
+                    isEditing = false,
+                    draftEvent = null,
+                    selectedEvent = savedEvent
+                )
+
+                // Check for pending changes after successful save
+                checkForPendingChanges()
+            } catch (e: IOException) {
+                state = state.copy(
+                    errorMessage = "Network error: ${e.message}",
+                    isLoading = false
+                )
+
+                // Check for pending changes after network error
+                // This is important because the repository will store changes locally
+                checkForPendingChanges()
+            } catch (e: Exception) {
+                state = state.copy(
+                    errorMessage = "Error saving event: ${e.message}",
+                    isLoading = false
+                )
+
+                // Check for pending changes after other errors
+                // This is important because the repository might store changes locally
+                checkForPendingChanges()
+            }
         }
     }
 
@@ -206,25 +245,45 @@ class EventViewModel(
      */
     fun deleteEvent(eventId: Long) {
         launchCoroutine {
-            executeApiCall(
-                loadingState = { state.copy(isLoading = true, errorMessage = null) },
-                errorState = { error -> state.copy(errorMessage = "Error deleting event: $error", isLoading = false) },
-                apiCall = { eventApiService.deleteEvent(eventId) },
-                onSuccess = { success ->
-                    // Refresh events
-                    if (state.currentPatientId != null) {
-                        loadEventsForPatient(state.currentPatientId!!)
-                    } else {
-                        loadAllEvents()
-                    }
-                    state.copy(
-                        isLoading = false,
-                        selectedEvent = if (state.selectedEvent?.id == eventId) null else state.selectedEvent,
-                        draftEvent = null,
-                        isEditing = false
-                    )
+            state = state.copy(isLoading = true, errorMessage = null)
+            try {
+                val success = eventRepository.deleteEvent(eventId)
+
+                // Refresh events
+                if (state.currentPatientId != null) {
+                    loadEventsForPatient(state.currentPatientId!!)
+                } else {
+                    loadAllEvents()
                 }
-            )
+
+                state = state.copy(
+                    isLoading = false,
+                    selectedEvent = if (state.selectedEvent?.id == eventId) null else state.selectedEvent,
+                    draftEvent = null,
+                    isEditing = false
+                )
+
+                // Check for pending changes after successful delete
+                checkForPendingChanges()
+            } catch (e: IOException) {
+                state = state.copy(
+                    errorMessage = "Network error: ${e.message}",
+                    isLoading = false
+                )
+
+                // Check for pending changes after network error
+                // This is important because the repository will mark for deletion locally
+                checkForPendingChanges()
+            } catch (e: Exception) {
+                state = state.copy(
+                    errorMessage = "Error deleting event: ${e.message}",
+                    isLoading = false
+                )
+
+                // Check for pending changes after other errors
+                // This is important because the repository might mark for deletion locally
+                checkForPendingChanges()
+            }
         }
     }
 
@@ -233,6 +292,49 @@ class EventViewModel(
      */
     fun clearErrorMessage() {
         state = state.copy(errorMessage = null)
+    }
+
+    /**
+     * Refreshes data based on the current context (all events or events for a specific patient).
+     */
+    private fun refreshData() {
+        if (state.currentPatientId != null) {
+            loadEventsForPatient(state.currentPatientId!!)
+        } else {
+            loadAllEvents()
+        }
+    }
+
+    /**
+     * Manually triggers synchronization.
+     */
+    fun triggerSynchronization() {
+        if (state.syncStatus == SyncStatus.SYNCING) return
+
+        synchronizationManager.triggerSynchronization()
+        state = state.copy(showSyncNotification = false)
+    }
+
+    /**
+     * Dismisses the synchronization notification.
+     */
+    fun dismissSyncNotification() {
+        state = state.copy(showSyncNotification = false)
+    }
+
+    /**
+     * Checks if there are pending changes that need to be synchronized.
+     * This is called after operations that might create pending changes.
+     */
+    private suspend fun checkForPendingChanges() {
+        val eventsToSync = withContext(ioDispatcher) {
+            eventRepository.getEventsToSync()
+        }
+
+        state = state.copy(
+            hasPendingChanges = eventsToSync.isNotEmpty(),
+            showSyncNotification = eventsToSync.isNotEmpty() && state.isNetworkAvailable
+        )
     }
 
     override fun onCleared() {

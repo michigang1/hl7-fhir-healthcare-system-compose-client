@@ -3,11 +3,13 @@ package presentation.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import data.remote.services.PatientApiService
+import data.repository.PatientRepository
 import data.model.PatientDto
 import data.model.PatientRequest
-import data.model.PatientResponse
+import data.sync.SynchronizationManager
+import data.sync.SyncStatus
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import presentation.state.PatientState
 import java.io.IOException
 
@@ -15,7 +17,8 @@ import java.io.IOException
  * ViewModel for the patient screen.
  */
 class PatientViewModel(
-    private val patientApiService: PatientApiService,
+    private val patientRepository: PatientRepository,
+    private val synchronizationManager: SynchronizationManager,
     private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -30,48 +33,38 @@ class PatientViewModel(
 
     init {
         loadPatients()
-    }
 
-    private fun PatientResponse.toPatientDto(): PatientDto {
-        return PatientDto(
-            id = this.id,
-            name = this.name,
-            surname = this.surname,
-            roomNo = this.roomNo,
-            dateOfBirth = this.dateOfBirth,
-            gender = this.gender,
-            address = this.address,
-            email = this.email,
-            phone = this.phone,
-            identifier = this.identifier,
-            organizationId = this.organizationId
-        )
-    }
-
-    private fun PatientDto.toPatientRequest(): PatientRequest {
-        return PatientRequest(
-            id = this.id,
-            name = this.name,
-            surname = this.surname,
-            roomNo = this.roomNo,
-            dateOfBirth = this.dateOfBirth,
-            gender = this.gender,
-            address = this.address,
-            email = this.email,
-            phone = this.phone,
-            identifier = this.identifier,
-            organizationId = this.organizationId
-        )
-    }
-
-    private suspend fun fetchAndMapPatients(): List<PatientDto> {
-        val response = withContext(ioDispatcher) {
-            patientApiService.getAllPatients()
+        // Check for pending changes on initialization
+        viewModelScope.launch {
+            checkForPendingChanges()
         }
-        if (response.isSuccessful) {
-            return response.body()?.map { it.toPatientDto() } ?: emptyList()
-        } else {
-            throw IOException("Error loading patients: ${response.code()} ${response.message()}")
+
+        // Observe network connectivity
+        viewModelScope.launch {
+            synchronizationManager.isNetworkAvailable.collectLatest { isAvailable ->
+                state = state.copy(isNetworkAvailable = isAvailable)
+
+                // If network becomes available and we have pending changes, show sync notification
+                if (isAvailable && state.hasPendingChanges) {
+                    state = state.copy(showSyncNotification = true)
+                }
+            }
+        }
+
+        // Observe synchronization status
+        viewModelScope.launch {
+            synchronizationManager.syncStatus.collectLatest { status ->
+                state = state.copy(syncStatus = status)
+
+                // If sync completed successfully, refresh data and hide notification
+                if (status == SyncStatus.COMPLETED) {
+                    loadPatients()
+                    state = state.copy(
+                        hasPendingChanges = false,
+                        showSyncNotification = false
+                    )
+                }
+            }
         }
     }
 
@@ -79,7 +72,7 @@ class PatientViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val newPatientsList = fetchAndMapPatients()
+                val newPatientsList = patientRepository.getAllPatients()
                 state = state.copy(patientsList = newPatientsList, isLoading = false)
             } catch (e: IOException) {
                 state = state.copy(errorMessage = e.message, isLoading = false)
@@ -109,18 +102,13 @@ class PatientViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val response = withContext(ioDispatcher) {
-                    patientApiService.getPatientById(patientId)
-                }
-                if (response.isSuccessful) {
-                    val loadedPatient = response.body()?.toPatientDto()
-                    state = state.copy(selectedPatient = loadedPatient, isLoading = false)
-                } else {
-                    state = state.copy(
-                        errorMessage = "Error loading patient details: ${response.code()} ${response.message()}",
-                        isLoading = false
-                    )
-                }
+                val loadedPatient = patientRepository.getPatientById(patientId)
+                state = state.copy(selectedPatient = loadedPatient, isLoading = false)
+            } catch (e: IOException) {
+                state = state.copy(
+                    errorMessage = "Error loading patient details: ${e.message}",
+                    isLoading = false
+                )
             } catch (e: Exception) {
                 state = state.copy(
                     errorMessage = "Exception while loading patient details: ${e.message}",
@@ -146,53 +134,63 @@ class PatientViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val response =
-                    if (patientToSave.id == NEW_PATIENT_ID) {
-                        withContext(ioDispatcher) {
-                            patientApiService.createPatient(patientToSave.toPatientRequest())
-                        }
-                    } else {
-                        withContext(ioDispatcher) {
-                            patientApiService.updatePatient(patientToSave.id, patientToSave.toPatientRequest())
-                        }
-                    }
+                val patientRequest = PatientRequest(
+                    id = patientToSave.id,
+                    name = patientToSave.name,
+                    surname = patientToSave.surname,
+                    roomNo = patientToSave.roomNo,
+                    dateOfBirth = patientToSave.dateOfBirth,
+                    gender = patientToSave.gender,
+                    address = patientToSave.address,
+                    email = patientToSave.email,
+                    phone = patientToSave.phone,
+                    identifier = patientToSave.identifier,
+                    organizationId = patientToSave.organizationId
+                )
 
-                if (response.isSuccessful) {
-                    val savedPatientDto = response.body()?.toPatientDto()
-                    val newPatientsList = fetchAndMapPatients()
-
-                    var finalSelectedPatient = state.selectedPatient
-                    if (savedPatientDto != null) {
-                        if (patientToSave.id == NEW_PATIENT_ID || state.selectedPatient?.id == patientToSave.id) {
-                            finalSelectedPatient = savedPatientDto
-                        }
-                    }
-
-                    state = state.copy(
-                        patientsList = newPatientsList,
-                        selectedPatient = finalSelectedPatient,
-                        isEditing = false,
-                        draftPatient = null,
-                        showAddPatientDialog = false,
-                        isLoading = false,
-                        errorMessage = null
-                    )
+                val savedPatientDto = if (patientToSave.id == NEW_PATIENT_ID) {
+                    patientRepository.createPatient(patientRequest)
                 } else {
-                    state = state.copy(
-                        errorMessage = "Error saving: ${response.code()} ${response.message()}",
-                        isLoading = false
-                    )
+                    patientRepository.updatePatient(patientToSave.id, patientRequest)
                 }
+
+                val newPatientsList = patientRepository.getAllPatients()
+
+                var finalSelectedPatient = state.selectedPatient
+                if (patientToSave.id == NEW_PATIENT_ID || state.selectedPatient?.id == patientToSave.id) {
+                    finalSelectedPatient = savedPatientDto
+                }
+
+                state = state.copy(
+                    patientsList = newPatientsList,
+                    selectedPatient = finalSelectedPatient,
+                    isEditing = false,
+                    draftPatient = null,
+                    showAddPatientDialog = false,
+                    isLoading = false,
+                    errorMessage = null
+                )
+
+                // Check for pending changes after successful save
+                checkForPendingChanges()
             } catch (e: IOException) {
                 state = state.copy(
                     errorMessage = "Error while saving or updating list: ${e.message}",
                     isLoading = false
                 )
+
+                // Check for pending changes after network error
+                // This is important because the repository will store changes locally
+                checkForPendingChanges()
             } catch (e: Exception) {
                 state = state.copy(
                     errorMessage = "Exception while saving: ${e.message}",
                     isLoading = false
                 )
+
+                // Check for pending changes after other errors
+                // This is important because the repository might store changes locally
+                checkForPendingChanges()
             }
         }
     }
@@ -239,11 +237,9 @@ class PatientViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true, errorMessage = null)
             try {
-                val response = withContext(ioDispatcher) {
-                    patientApiService.deletePatient(patientId)
-                }
-                if (response.isSuccessful) {
-                    val newPatientsList = fetchAndMapPatients()
+                val success = patientRepository.deletePatient(patientId)
+                if (success) {
+                    val newPatientsList = patientRepository.getAllPatients()
                     var newSelectedPatient = state.selectedPatient
                     if (state.selectedPatient?.id == patientId) {
                         newSelectedPatient = null
@@ -255,9 +251,12 @@ class PatientViewModel(
                         isLoading = false,
                         errorMessage = null
                     )
+
+                    // Check for pending changes after successful delete
+                    checkForPendingChanges()
                 } else {
                     state = state.copy(
-                        errorMessage = "Error deleting: ${response.code()} ${response.message()}",
+                        errorMessage = "Error deleting patient",
                         isLoading = false
                     )
                 }
@@ -266,17 +265,57 @@ class PatientViewModel(
                     errorMessage = "Error while deleting or updating list: ${e.message}",
                     isLoading = false
                 )
+
+                // Check for pending changes after network error
+                // This is important because the repository will mark for deletion locally
+                checkForPendingChanges()
             } catch (e: Exception) {
                 state = state.copy(
                     errorMessage = "Exception while deleting: ${e.message}",
                     isLoading = false
                 )
+
+                // Check for pending changes after other errors
+                // This is important because the repository might mark for deletion locally
+                checkForPendingChanges()
             }
         }
     }
 
     fun clearErrorMessage() {
         state = state.copy(errorMessage = null)
+    }
+
+    /**
+     * Checks if there are pending changes that need to be synchronized.
+     * This is called after operations that might create pending changes.
+     */
+    private suspend fun checkForPendingChanges() {
+        val patientsToSync = withContext(ioDispatcher) {
+            patientRepository.getPatientsToSync()
+        }
+
+        state = state.copy(
+            hasPendingChanges = patientsToSync.isNotEmpty(),
+            showSyncNotification = patientsToSync.isNotEmpty() && state.isNetworkAvailable
+        )
+    }
+
+    /**
+     * Manually triggers synchronization.
+     */
+    fun triggerSynchronization() {
+        if (state.syncStatus == SyncStatus.SYNCING) return
+
+        synchronizationManager.triggerSynchronization()
+        state = state.copy(showSyncNotification = false)
+    }
+
+    /**
+     * Dismisses the synchronization notification.
+     */
+    fun dismissSyncNotification() {
+        state = state.copy(showSyncNotification = false)
     }
 
     fun onCleared() {

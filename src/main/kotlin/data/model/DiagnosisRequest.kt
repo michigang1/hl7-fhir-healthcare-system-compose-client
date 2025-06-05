@@ -1,21 +1,28 @@
 package data.model
 
-import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import data.serializers.LocalDateSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 
 @Serializable
 data class DiagnosisRequest(
-    val id: Long,
+    @SerialName("id")
+    val id: Long?,
 
-    val code: String,
+    @SerialName("code")
+    val code: String?,
 
-    val isPrimary: Boolean,
+    @SerialName("isPrimary")
+    val isPrimary: Boolean? = false,
 
-    val description: String,
+    @SerialName("description")
+    val description: String?,
 
+    @SerialName("diagnosedAt")
     @Serializable(with = LocalDateSerializer::class)
-    val diagnosedAt: LocalDate,
+    val diagnosedAt: LocalDate?,
 
-    val diagnosedBy: String
+    @SerialName("diagnosedBy")
+    val diagnosedBy: String?,
 )

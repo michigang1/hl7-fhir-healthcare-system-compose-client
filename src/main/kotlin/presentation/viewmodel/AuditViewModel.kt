@@ -22,29 +22,94 @@ class AuditViewModel(
 ) : BaseViewModel<AuditState>(mainDispatcher, ioDispatcher) {
     override var state by mutableStateOf(AuditState())
 
+    // Store all audit events
+    private var allAuditEvents: List<AuditEvent> = emptyList()
+
+    init {
+        // Load all audit events when the ViewModel is created
+        loadAllAuditEvents()
+    }
+
+    /**
+     * Loads all audit events from the API.
+     */
+    private fun loadAllAuditEvents() {
+        state = state.copy(isLoading = true, errorMessage = null)
+
+        launchCoroutine {
+            try {
+                // Fetch events and remove duplicates
+                val events = fetchAuditEvents()
+
+                // Remove duplicate events by considering a combination of fields that uniquely identify an event
+                allAuditEvents = events.distinctBy { event -> 
+                    // Create a composite key using the relevant fields
+                    Triple(
+                        // Use eventTypeRaw as timestamp if it's valid, otherwise use eventDate
+                        if (event.eventTypeRaw.matches(Regex("\\d{4}-\\d{2}-\\d{2}T.*"))) {
+                            try {
+                                Instant.parse(event.eventTypeRaw).toEpochMilli()
+                            } catch (e: Exception) {
+                                event.eventDate.toEpochMilli()
+                            }
+                        } else {
+                            event.eventDate.toEpochMilli()
+                        },
+                        event.principal,
+                        event.eventType
+                    )
+                }
+
+                // After loading all events, filter for the current date
+                loadAuditEventsForDate(state.selectedDate)
+            } catch (e: Exception) {
+                state = state.copy(
+                    errorMessage = "Error loading audit events: ${e.message}",
+                    isLoading = false
+                )
+            }
+        }
+    }
+
     /**
      * Loads audit events for the selected date.
      */
     fun loadAuditEventsForDate(date: LocalDate) {
         state = state.copy(selectedDate = date, isLoading = true, errorMessage = null)
 
-        // Calculate start and end of the day in Instant
-        val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-
+        // No need to fetch events again, just filter the stored events
         launchCoroutine {
             try {
-                val events = fetchAuditEvents()
-
                 // Filter events for the selected date
-                // Include events that occur on the selected date (between start of day and end of day)
-                val filteredEvents = events.filter { event ->
-                    val eventDate = event.eventDate
-                    eventDate.compareTo(startOfDay) >= 0 && eventDate.compareTo(endOfDay) < 0
+                val filteredEvents = allAuditEvents.filter { event ->
+                    // First try to parse eventTypeRaw as a timestamp if it looks like one
+                    if (event.eventTypeRaw.matches(Regex("\\d{4}-\\d{2}-\\d{2}T.*"))) {
+                        try {
+                            val rawTimestamp = Instant.parse(event.eventTypeRaw)
+                            val rawLocalDate = rawTimestamp.atZone(ZoneId.systemDefault()).toLocalDate()
+                            return@filter rawLocalDate == date
+                        } catch (e: Exception) {
+                            // If parsing fails, fall back to eventDate
+                        }
+                    }
+
+                    // Fall back to eventDate if eventTypeRaw is not a valid timestamp
+                    val eventLocalDate = event.eventDate.atZone(ZoneId.systemDefault()).toLocalDate()
+                    eventLocalDate == date
                 }
 
                 // Sort events by time (ascending order)
-                val sortedEvents = filteredEvents.sortedBy { it.eventDate }
+                val sortedEvents = filteredEvents.sortedBy { event -> 
+                    // Try to use eventTypeRaw as timestamp for sorting if it's a valid timestamp
+                    if (event.eventTypeRaw.matches(Regex("\\d{4}-\\d{2}-\\d{2}T.*"))) {
+                        try {
+                            return@sortedBy Instant.parse(event.eventTypeRaw)
+                        } catch (e: Exception) {
+                            // Fall back to eventDate if parsing fails
+                        }
+                    }
+                    event.eventDate
+                }
 
                 state = state.copy(
                     auditEvents = sortedEvents,
@@ -52,7 +117,7 @@ class AuditViewModel(
                 )
             } catch (e: Exception) {
                 state = state.copy(
-                    errorMessage = "Error loading audit events: ${e.message}",
+                    errorMessage = "Error filtering audit events: ${e.message}",
                     isLoading = false
                 )
             }

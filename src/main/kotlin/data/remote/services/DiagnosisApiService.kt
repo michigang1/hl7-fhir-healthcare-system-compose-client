@@ -24,6 +24,12 @@ interface DiagnosisApiService {
         @Body request: DiagnosisRequest
     ): Response<DiagnosisResponse> // Mono<ResponseEntity<DiagnosisResponse>>
 
+    @POST("patients/{patientId}/diagnoses")
+    suspend fun createDiagnosis(
+        @Path("patientId") patientId: Long,
+        @Body request: DiagnosisRequest
+    ): Response<DiagnosisResponse> // Mono<ResponseEntity<DiagnosisResponse>>
+
     @PUT("patients/{patientId}/diagnoses/{diagnosisId}")
     suspend fun updateDiagnosis(
         @Path("patientId") patientId: Long,

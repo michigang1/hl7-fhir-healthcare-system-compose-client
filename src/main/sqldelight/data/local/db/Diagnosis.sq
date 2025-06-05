@@ -1,0 +1,60 @@
+CREATE TABLE Diagnosis (
+    id INTEGER PRIMARY KEY,
+    patientId INTEGER NOT NULL,
+    diagnosisCode TEXT NOT NULL,
+    isPrimary INTEGER NOT NULL, -- SQLite doesn't have a boolean type, so we use INTEGER (0 = false, 1 = true)
+    description TEXT NOT NULL,
+    date TEXT NOT NULL,
+    prescribedBy TEXT NOT NULL,
+    syncStatus TEXT NOT NULL DEFAULT 'SYNCED', -- SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
+    FOREIGN KEY (patientId) REFERENCES Patient(id)
+);
+
+-- Get all diagnoses
+getAllDiagnoses:
+SELECT * FROM Diagnosis WHERE syncStatus != 'PENDING_DELETE';
+
+-- Get diagnoses for a patient
+getDiagnosesForPatient:
+SELECT * FROM Diagnosis WHERE patientId = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Get a diagnosis by ID
+getDiagnosisById:
+SELECT * FROM Diagnosis WHERE id = ? AND syncStatus != 'PENDING_DELETE';
+
+-- Insert a new diagnosis
+insertDiagnosis:
+INSERT INTO Diagnosis(id, patientId, diagnosisCode, isPrimary, description, date, prescribedBy, syncStatus)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Update an existing diagnosis
+updateDiagnosis:
+UPDATE Diagnosis
+SET patientId = ?, diagnosisCode = ?, isPrimary = ?, description = ?, date = ?, prescribedBy = ?, syncStatus = ?
+WHERE id = ?;
+
+-- Mark a diagnosis for deletion
+markDiagnosisForDeletion:
+UPDATE Diagnosis
+SET syncStatus = 'PENDING_DELETE'
+WHERE id = ?;
+
+-- Delete a diagnosis
+deleteDiagnosis:
+DELETE FROM Diagnosis
+WHERE id = ?;
+
+-- Get all diagnoses that need to be synced
+getDiagnosesToSync:
+SELECT * FROM Diagnosis WHERE syncStatus != 'SYNCED';
+
+-- Update sync status
+updateSyncStatus:
+UPDATE Diagnosis
+SET syncStatus = ?
+WHERE id = ?;
+
+-- Delete all unsynchronized diagnoses (those with PENDING_CREATE, PENDING_UPDATE, or PENDING_DELETE status)
+deleteUnsynchronizedDiagnoses:
+DELETE FROM Diagnosis
+WHERE syncStatus != 'SYNCED';

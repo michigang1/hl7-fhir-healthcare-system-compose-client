@@ -10,7 +10,8 @@ data class EventDto(
     val authorId: Long,
     val authorUsername: String,
     val eventDateTime: LocalDateTime,
-    val patients: List<PatientDto>
+    val patients: List<PatientDto>,
+    val syncStatus: String = "SYNCED" // SYNCED, PENDING_CREATE, PENDING_UPDATE, PENDING_DELETE
 ) {
     // Convert EventResponse to EventDto
     companion object {
@@ -36,7 +37,8 @@ data class EventDto(
                         identifier = it.identifier,
                         organizationId = it.organizationId
                     )
-                }
+                },
+                syncStatus = "SYNCED"
             )
         }
     }
